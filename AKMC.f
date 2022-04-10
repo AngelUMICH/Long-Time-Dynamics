@@ -15,7 +15,7 @@
 
       SUBROUTINE SEAKMC
 
-      USE SYSTEM,ONLY : NTSTEP,ISTEP, RANK,NATOMC,RA
+      USE SYSTEM,ONLY : NTSTEP,ISTEP, RANK,NATOMC,RA, SKIP
 
       IMPLICIT NONE
 
@@ -53,12 +53,15 @@
           CALL KMC
 
   !!INTRODUCE NEW FRENKEL DEFECTS DUE TO DOSE RATE  
+          IF (SKIP .EQV. .FALSE.) THEN
 
-          CALL DOSE
+            CALL DOSE
           
   !!STATIC RELAXATION
 
-          CALL OPT         
+            CALL OPT         
+          
+          ENDIF
 
         END IF
 
@@ -1239,6 +1242,8 @@
       integer :: i,j,k,jmapsz,ijump
       REAL*8, allocatable, dimension(:,:) :: pj
 
+      SKIP = .FALSE.
+
       speed = 0.0d0
       jmapsz = 1000
 
@@ -1398,6 +1403,16 @@
       EMIG(K,I) = (EMIG(K,I)*EMIC(K,I) + EM(EID,JID)) / (EMIC(K,I)+1)
 
       EMIC(K,I) = EMIC(K,I) + 1
+
+!!CHECKING FOR TOO HIGH TRANSITION ENERGY
+
+      IF (EM(EID,JID) .GT. 0.8) THEN
+
+        SKIP = .TRUE.
+
+        WRITE(6,*) 'MIGRATION ENERGY GREATER THAN 0.8eV -> SKIPPING'
+
+      ENDIF
 
 !!WRITING THE DIMER ENERGIES TO STD_KDIM.OUT
 

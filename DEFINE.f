@@ -116,9 +116,11 @@
 
 !!EMIG: PRE-SELECTION ENERGIES
 !!EMIC: COUNTS FOR WEIGHTING AVERAGES
+!!SKIP: FOR UNFAVORABLE TRANSITION ENERGIES REDO DFSEL
 
       REAL*8, ALLOCATABLE :: EMIG(:,:)
       INTEGER, ALLOCATABLE:: EMIC(:,:)
+      LOGICAL :: SKIP
 
       END MODULE SYSTEM
 !***********************************************************************!
