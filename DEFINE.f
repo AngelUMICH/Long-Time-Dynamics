@@ -115,10 +115,10 @@
       REAL*8,ALLOCATABLE :: SR(:,:,:,:),SRBUFF(:,:,:,:),OR(:,:,:,:)
 
 !!EMIG: PRE-SELECTION ENERGIES
-!!EC: COUNTS FOR WEIGHTING AVERAGES
+!!EMIC: COUNTS FOR WEIGHTING AVERAGES
 
       REAL*8, ALLOCATABLE :: EMIG(:,:)
-      INTEGER, ALLOCATABLE:: EC(:,:)
+      INTEGER, ALLOCATABLE:: EMIC(:,:)
 
       END MODULE SYSTEM
 !***********************************************************************!

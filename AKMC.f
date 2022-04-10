@@ -55,7 +55,6 @@
   !!INTRODUCE NEW FRENKEL DEFECTS DUE TO DOSE RATE  
 
           CALL DOSE
-      !     CALL ADDFRENKEL
           
   !!STATIC RELAXATION
 
@@ -1396,9 +1395,9 @@
 
       I = ABS(INT(PX(6,1)))
 
-      EMIG(K,I) = (EMIG(K,I)*EC(K,I) + EM(EID,JID)) / (EC(K,I)+1)
+      EMIG(K,I) = (EMIG(K,I)*EMIC(K,I) + EM(EID,JID)) / (EMIC(K,I)+1)
 
-      EC(K,I) = EC(K,I) + 1
+      EMIC(K,I) = EMIC(K,I) + 1
 
 !!WRITING THE DIMER ENERGIES TO STD_KDIM.OUT
 
