@@ -354,6 +354,45 @@
 
       CALL MAPCELL
 
+!!SETUP FOR PRE-SELECTION PROCESS
+
+      ALLOCATE(EMIG(2,50)); EMIG=0
+      ALLOCATE(EC(2,50)); EC=1
+
+      EMIG(1,1)=0.56
+      EMIG(1,2)=0.64
+      EMIG(1,3)=0.67
+      EMIG(1,4)=0.438
+
+      do i = 5,50
+       EMIG(1,i)=3.5
+      enddo
+
+      EMIG(2,1)=0.30760
+      EMIG(2,2)=0.04050
+      EMIG(2,3)=0.03466
+      EMIG(2,4)=0.20219
+      EMIG(2,5)=0.01495
+      EMIG(2,6)=0.08075
+      EMIG(2,7)=0.80848
+      EMIG(2,8)=0.05914
+      EMIG(2,9)=0.13892
+      EMIG(2,10)=0.22239
+      EMIG(2,11)=0.0535
+      EMIG(2,12)=0.09017
+      EMIG(2,13)=0.08948
+      EMIG(2,14)=0.09223
+      EMIG(2,15)=0.031
+      EMIG(2,16)=0.031
+      EMIG(2,17)=0.031
+      EMIG(2,18)=0.031
+      EMIG(2,19)=0.031
+      EMIG(2,20)=0.031
+
+      do i = 21,50
+       EMIG(2,i)=3.0
+      enddo
+
       RETURN
 
       END SUBROUTINE SYS_INIT

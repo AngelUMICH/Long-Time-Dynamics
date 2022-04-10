@@ -1236,43 +1236,9 @@
       IMPLICIT NONE
 
       REAL*8 RX,RY,RZ,RS,PBC,PTEMP(7,NDEMAX)
-      REAL*8 emig(2,50),rnd,speed,dt,scalef,sump,prop
+      REAL*8 rnd,speed,dt,scalef,sump,prop
       integer :: i,j,k,jmapsz,ijump
       REAL*8, allocatable, dimension(:,:) :: pj
-
-      emig(1,1)=0.56
-      emig(1,2)=0.64
-      emig(1,3)=0.67
-      emig(1,4)=0.438
-
-      do i = 5,50
-       emig(1,i)=3.5
-      enddo
-
-      emig(2,1)=0.30760
-      emig(2,2)=0.04050
-      emig(2,3)=0.03466
-      emig(2,4)=0.20219
-      emig(2,5)=0.01495
-      emig(2,6)=0.08075
-      emig(2,7)=0.80848
-      emig(2,8)=0.05914
-      emig(2,9)=0.13892
-      emig(2,10)=0.22239
-      emig(2,11)=0.0535
-      emig(2,12)=0.09017
-      emig(2,13)=0.08948
-      emig(2,14)=0.09223
-      emig(2,15)=0.031
-      emig(2,16)=0.031
-      emig(2,17)=0.031
-      emig(2,18)=0.031
-      emig(2,19)=0.031
-      emig(2,20)=0.031
-
-      do i = 21,50
-       emig(2,i)=3.0
-      enddo
 
       speed = 0.0d0
       jmapsz = 1000
@@ -1362,7 +1328,7 @@
 
       IMPLICIT NONE
 
-      INTEGER J,K,COUNTER,jmapsz
+      INTEGER I,J,K,COUNTER,jmapsz
 
       REAL*8 RND,dt,scalef,prop
 
@@ -1419,6 +1385,22 @@
 !!EID:THE ID OF THE EVENT THAT IS CHOSEN
 
       EID = K
+
+!!UPDATING THE PRE-SELECTION ENERGIES
+
+      IF(PX(6,1).LT.0) THEN
+      K=1
+      ELSE
+      K=2
+      ENDIF
+
+      I = ABS(INT(PX(6,1)))
+
+      EMIG(K,I) = (EMIG(K,I)*EC(K,I) + EM(EID,JID)) / (EC(K,I)+1)
+
+      EC(K,I) = EC(K,I) + 1
+
+!!WRITING THE DIMER ENERGIES TO STD_KDIM.OUT
 
       WRITE(6,*) 'JID:',JID,'EID:',EID,'RND',RND
       DO K = 1,NDIMER
