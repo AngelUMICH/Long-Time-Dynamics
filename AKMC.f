@@ -15,7 +15,7 @@
 
       SUBROUTINE SEAKMC
 
-      USE SYSTEM,ONLY : NTSTEP,ISTEP, RANK,NATOMC,RA, SKIP
+      USE SYSTEM,ONLY : NTSTEP,ISTEP, RANK,NATOMC,RA, SKIP, EMIG,EMIC
 
       IMPLICIT NONE
 
@@ -1366,8 +1366,6 @@
       if(FQSUM.gt.0.0) then
       TMEAN = -LOG10(RND)/FQSUM
 
-      TIME = TIME + TMEAN
-
       dt = 1.0/fqsum
       scalef = dt*dfloat(jmapsz)
       endif
@@ -1406,7 +1404,11 @@
 
 !!CHECKING FOR TOO HIGH TRANSITION ENERGY
 
-      IF (EM(EID,JID) .GT. 0.8) THEN
+      IF (EM(EID,JID) .LE. 0.8) THEN
+
+        TIME = TIME + TMEAN
+
+      ELSE
 
         SKIP = .TRUE.
 
