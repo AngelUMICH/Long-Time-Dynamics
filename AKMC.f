@@ -65,6 +65,10 @@
 
         END IF
 
+  !!CREATION OF RESTART FILES (DOES NOT RESTART SIMULATION)
+
+        CALL RESTART
+
       ENDDO
 
       IF (RANK .EQ. 0) THEN
@@ -73,11 +77,11 @@
 
         CALL EXECUTE_COMMAND_LINE('mv mig*.log std_evo.out ./DUMP')
 
-       WRITE(26,*) NATOMC
+        WRITE(26,*) NATOMC
 
-       DO I = 1, NATOMC
-        WRITE(26,'(3F14.5)') (RA(J,I), J=1,3)
-       ENDDO
+        DO I = 1, NATOMC
+          WRITE(26,'(3F14.5)') (RA(J,I), J=1,3)
+        ENDDO
 
       ENDIF
 
