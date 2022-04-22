@@ -8,7 +8,8 @@ FLAGS = -O3 -fopenmp -std=legacy
 	mpifort $(FLAGS) -o $@ -c $<
 
 seakmc.exe: $(OBJS)
-	mpifort $(FLAGS) -Wall -fcheck=all  -o  $@  $^
+#	mpifort $(FLAGS) -Wall -fcheck=all  -o  $@  $^
+	mpifort $(FLAGS) -o  $@  $^
 	@if [ ! -d Obj_files ]; then mkdir Obj_files; fi
 	@mv *.o *.mod Obj_files
 
