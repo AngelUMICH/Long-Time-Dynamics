@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=SEAKMC
+#SBATCH --job-name=600k
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --account=gaofeium1
 #SBATCH --partition=standard
