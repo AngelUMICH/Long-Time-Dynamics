@@ -5,23 +5,32 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: "0 2 * * 1-5"
 
 jobs:
   build:
 
     runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
     
-    - name: Build
-      run: make
+    steps:
+      - uses: actions/checkout@v3
       
-    - name: Install dependencies
-      run: make
-      
-    - name: Run check
-      run: make check
-      
-    - name: Run distcheck
-      run: make distcheck
+      - name: download-openmpi
+        run: wget https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.2.tar.gz
+      - name: extract-openmpi
+        run: tar -xvf ./openmpi-4.0.2.tar.gz
+      - name: configure-openmpi
+        run: ./openmpi-4.0.2/configure --prefix="/home/${USER}/.openmpi"
+      - name: install-openmpi
+        run: |
+          make -j
+          sudo make install
+      - name: check OpenMPI version
+        run: mpifort --version
+        
+      - name: check gfortran version
+        run: gfortran --version
+
+      - name: Build
+        run: make
