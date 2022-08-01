@@ -24,10 +24,10 @@ jobs:
         run: ./openmpi-4.0.2/configure --prefix="/home/${USER}/.openmpi"
       - name: install-openmpi
         run: |
-          make -j
+          make -j8
           sudo make install
       - name: check OpenMPI version
-        run: mpifort --version
+        run: mpiexec --version
         
       - name: check gfortran version
         run: gfortran --version
