@@ -21,7 +21,7 @@ jobs:
       - name: extract-openmpi
         run: tar -xvf ./openmpi-4.0.2.tar.gz
       - name: configure-openmpi
-        run: ./openmpi-4.0.2/configure --prefix="/home/${USER}/.openmpi"
+        run: ./openmpi-4.0.2/configure
       - name: install-openmpi
         run: |
           make -j8
