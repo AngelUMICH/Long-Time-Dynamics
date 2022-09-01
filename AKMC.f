@@ -1107,7 +1107,7 @@
          if(em(k,j).lt.10.0) then
           POSUM = POSUM + FQ(K,J)*scalef
          endif
-        if(posum.ge.prop) goto 200
+         if(posum.ge.prop) goto 200
         ENDDO
       ENDDO
 
@@ -1136,7 +1136,7 @@
 
 !!CHECKING FOR TOO HIGH TRANSITION ENERGY
 
-      IF (EM(EID,JID) .LE. 0.6) THEN
+      IF (EM(EID,JID) .LE. 0.8 .AND. EID .LE. NDIMER) THEN
 
         TIME = TIME + TMEAN
 
