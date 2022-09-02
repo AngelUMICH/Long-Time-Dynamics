@@ -457,6 +457,7 @@
 !***********************************************************************!
 !!THIS SUBROUTINE IS TO IDENTIFY DEFECT CLUSTERS IN THE SYSTEM
 ! Gao -2021
+! Modified: Angel Chavira 9/1/2022
 
       SUBROUTINE DCIDNT
       USE SYSTEM
@@ -474,7 +475,7 @@
       integer, allocatable, dimension(:) :: Neighbor
       integer, allocatable, dimension(:,:) :: NNeighbor
       integer, allocatable, dimension(:) :: iicn, iiticn
-      integer :: iticn, icn,ijpcx,ijpcy,ijpcz
+      integer :: iticn, icn,ijpcx,ijpcy,ijpcz, comdc
 
       OPEN(13,file='defecttemp.dat',status='replace')
 
@@ -750,18 +751,18 @@
         I = iiticn(1)
         J = iiticn(K)
 
-        if((px(1,i)<1.0.and.px(1,j)>rbox-1.0).or.
-     >     (px(1,j)<1.0.and.px(1,i)>rbox-1.0)) then
+        if((px(1,i)<1.0.or.px(1,j)>rbox-1.0).or.
+     >     (px(1,j)<1.0.or.px(1,i)>rbox-1.0)) then
            ijpcx = 1
         end if
 
-        if((px(2,i)<1.0.and.px(2,j)>rbox-1.0).or.
-     >     (px(2,j)<1.0.and.px(2,i)>rbox-1.0)) then
+        if((px(2,i)<1.0.or.px(2,j)>rbox-1.0).or.
+     >     (px(2,j)<1.0.or.px(2,i)>rbox-1.0)) then
            ijpcy = 1
         end if
 
-        if((px(3,i)<1.0.and.px(3,j)>rbox-1.0).or.
-     >     (px(3,j)<1.0.and.px(3,i)>rbox-1.0)) then
+        if((px(3,i)<1.0.or.px(3,j)>rbox-1.0).or.
+     >     (px(3,j)<1.0.or.px(3,i)>rbox-1.0)) then
            ijpcz = 1
         end if
 
@@ -802,24 +803,28 @@
 
         enddo
 
+        comdc = 1
+
         do K=2,iticn
 
             I = 1
             J = K
 
-            PTEMP(1,I) = PTEMP(1,I)*ABS(PTEMP(6,I))+
+            PTEMP(1,I) = PTEMP(1,I)*ABS(comdc)+
      >                   PTEMP(1,J)*ABS(PTEMP(6,J))
-            PTEMP(2,I) = PTEMP(2,I)*ABS(PTEMP(6,I))+
+            PTEMP(2,I) = PTEMP(2,I)*ABS(comdc)+
      >                   PTEMP(2,J)*ABS(PTEMP(6,J))
-            PTEMP(3,I) = PTEMP(3,I)*ABS(PTEMP(6,I))+
+            PTEMP(3,I) = PTEMP(3,I)*ABS(comdc)+
      >                   PTEMP(3,J)*ABS(PTEMP(6,J))
 
-            PTEMP(1,I) = PTEMP(1,I)/(ABS(PTEMP(6,I))+ABS(PTEMP(6,J)))
-            PTEMP(2,I) = PTEMP(2,I)/(ABS(PTEMP(6,I))+ABS(PTEMP(6,J)))
-            PTEMP(3,I) = PTEMP(3,I)/(ABS(PTEMP(6,I))+ABS(PTEMP(6,J)))
+            PTEMP(1,I) = PTEMP(1,I)/(ABS(comdc)+ABS(PTEMP(6,J)))
+            PTEMP(2,I) = PTEMP(2,I)/(ABS(comdc)+ABS(PTEMP(6,J)))
+            PTEMP(3,I) = PTEMP(3,I)/(ABS(comdc)+ABS(PTEMP(6,J)))
 
             PTEMP(6,I) = PTEMP(6,I)+PTEMP(6,J)
             PTEMP(5,J) = 0.0D0
+
+            comdc = comdc + 1
         enddo
 
         do K=1,iticn
@@ -857,18 +862,20 @@
 
        else
 
+       comdc = 1
+
         do K=2,iticn
 
             I = iiticn(1)
             J = iiticn(K)
 
-            PX(1,I) = PX(1,I)*ABS(PX(6,I))+PX(1,J)*ABS(PX(6,J))
-            PX(2,I) = PX(2,I)*ABS(PX(6,I))+PX(2,J)*ABS(PX(6,J))
-            PX(3,I) = PX(3,I)*ABS(PX(6,I))+PX(3,J)*ABS(PX(6,J))
+            PX(1,I) = PX(1,I)*ABS(comdc)+PX(1,J)*ABS(PX(6,J))
+            PX(2,I) = PX(2,I)*ABS(comdc)+PX(2,J)*ABS(PX(6,J))
+            PX(3,I) = PX(3,I)*ABS(comdc)+PX(3,J)*ABS(PX(6,J))
 
-            PX(1,I) = PX(1,I)/(ABS(PX(6,I))+ABS(PX(6,J)))
-            PX(2,I) = PX(2,I)/(ABS(PX(6,I))+ABS(PX(6,J)))
-            PX(3,I) = PX(3,I)/(ABS(PX(6,I))+ABS(PX(6,J)))
+            PX(1,I) = PX(1,I)/(ABS(comdc)+ABS(PX(6,J)))
+            PX(2,I) = PX(2,I)/(ABS(comdc)+ABS(PX(6,J)))
+            PX(3,I) = PX(3,I)/(ABS(comdc)+ABS(PX(6,J)))
 
             if(px(1,i)<0.0) px(1,i) = 0.0
             if(px(2,i)<0.0) px(2,i) = 0.0
@@ -876,6 +883,8 @@
 
             PX(6,I) = PX(6,I)+PX(6,J)
             PX(5,J) = 0.0D0
+
+            comdc = comdc + 1
         enddo
        endif
 
