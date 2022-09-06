@@ -15,13 +15,13 @@
 
       SUBROUTINE SEAKMC
 
+      USE MPI
+
       USE SYSTEM,ONLY : NTSTEP,ISTEP, RANK,NATOMC,RA, SKIP, EMIG,EMIC
 
       IMPLICIT NONE
 
       INTEGER I,J
-
-      INCLUDE 'mpif.h'
 
       DO ISTEP = 1,NTSTEP
 
@@ -262,6 +262,8 @@
 
       SUBROUTINE SPS
 
+      USE MPI
+
       USE SYSTEM
       USE DEFECT
       USE KMCVAR
@@ -269,8 +271,6 @@
       USE CLASS_DIMER
 
       IMPLICIT NONE
-
-      INCLUDE 'mpif.h'
 
       TYPE(DIMER) :: ADIMER
 
