@@ -11,11 +11,11 @@
 !***********************************************************************!
       PROGRAM MAIN
 
+      USE MPI
+
       USE SYSTEM,ONLY : TJOB, IERR, RANK, NPROCS, NDIMER
 
       IMPLICIT NONE
-
-      INCLUDE 'mpif.h'
 
       !INTEGER IERR, RANK, NPROCS !OMP VARIABLES
 
