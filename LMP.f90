@@ -47,4 +47,26 @@ contains
     if ( .not. associated (x) ) print *, 'x is not associated'
   
   end subroutine LMP_INIT
+!***********************************************************************!
+  subroutine LMP_RELAX
+
+  use SYSTEM
+
+  implicit none
+
+  integer :: i,j
+
+  !Minimize/relax the system
+  call lammps_command(lmp, 'min_style cg')
+  call lammps_command(lmp, 'minimize 1.0e-4 1.0e-6 100 1000')
+
+  !When ONLY relaxing system output system to std_kopt.out
+  if (TJOB.EQ.1) then
+    write(26,*) NATOMC
+      do i = 1, NATOMC
+        write(26,'(3F14.5)') (RA(j,i), j=1,3)
+      end do
+  end if
+
+  end subroutine LMP_RELAX
 end module LMP_DRIVER
