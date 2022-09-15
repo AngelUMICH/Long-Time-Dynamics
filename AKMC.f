@@ -13,7 +13,7 @@
 !***********************************************************************!
 !!MAJOR SUBROUTINE OF SELF-EVOLVING ATOMISTIC KINETIC MONTE CARLO CODE**!
 
-      SUBROUTINE SEAKMC
+      SUBROUTINE OPLD
 
       USE MPI
 
