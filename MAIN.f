@@ -44,7 +44,7 @@
 
         IF (RANK .EQ. 0) THEN
 
-          CALL RELAX
+          CALL LMP_RELAX
 
         ENDIF
 !!IF SELF-EVOVLING ATOMISTIC KMC IS CHOSEN
