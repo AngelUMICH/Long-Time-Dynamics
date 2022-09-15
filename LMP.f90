@@ -49,7 +49,7 @@ contains
 
     !accessing the atom positions within lammps
     call lammps_extract_atom (x, lmp, 'x')
-    if ( .not. associated (x) ) print *, 'x is not associated'
+    if ( .not. associated (x) .and. RANK == 0) write(*,*) 'x is not associated'
   
   end subroutine LMP_INIT
 !***********************************************************************!
@@ -69,15 +69,15 @@ contains
   if (TJOB.EQ.1) then
 
     call LMP_ENERGY
-    
-    write(*,*) 'Total System Energy = ', ENCALC
 
     !output relaxed system to std_kopt.out
-    if (rank == 0) then
+    if (RANK == 0) then
+      write(*,*) 'Total System Energy = ', ENCALC
+
       write(26,*) NATOMC
-        do i = 1, NATOMC
-          write(26,'(3F14.5)') (RA(j,i), j=1,3)
-        end do
+      do i = 1, NATOMC
+        write(26,'(3F14.5)') (RA(j,i), j=1,3)
+      end do
     end if
 
   end if
@@ -86,7 +86,7 @@ contains
 !***********************************************************************!
   subroutine LMP_ENERGY
 
-  use SYSTEM, only: ENCALC
+  use SYSTEM, only: ENCALC, RANK
 
   implicit none
 
@@ -101,10 +101,10 @@ contains
   !Might not need to extract pe everytime. It is already bound
   call lammps_extract_compute (pe, lmp, 'TotEn', &
                                 LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
-  if ( .not. associated (pe) ) print *, 'pe is not associated'
+  if ( .not. associated (pe) .and. RANK == 0) write(*,*) 'pe is not associated'
   ENCALC = pe
 
-  if (OENCALC == ENCALC) write(*,*) 'Warning: sys energy might not be updated'
+  if (OENCALC == ENCALC .and. RANK == 0) write(*,*) 'Warning: sys energy might not be updated'
   
   end subroutine LMP_ENERGY
 !***********************************************************************!
