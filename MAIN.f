@@ -42,11 +42,8 @@
 
       IF(TJOB.EQ.1) THEN
 
-        IF (RANK .EQ. 0) THEN
+            CALL LMP_RELAX
 
-          CALL LMP_RELAX
-
-        ENDIF
 !!IF SELF-EVOVLING ATOMISTIC KMC IS CHOSEN
 
       ELSE IF(TJOB.EQ.2) THEN
