@@ -62,7 +62,7 @@
 
         ELSE
 
-          CALL SEAKMC
+          CALL OPLD
 
         ENDIF
 
