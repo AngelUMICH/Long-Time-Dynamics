@@ -7,8 +7,6 @@ module LMP_DRIVER
 
   !lmp: interactable LAMMPS object
   type (C_ptr) :: lmp
-  !x:   pointer to atom positions within lammps mem
-  real (C_double), dimension(:,:), pointer :: x => NULL()
   !pe:  potential energy
   real (C_double), pointer :: pe => NULL()
   !compute: a lammps compute value
@@ -23,9 +21,9 @@ contains
     use SYSTEM
 
     implicit none
+    integer :: i, j
+    real*8, DIMENSION(:), allocatable :: pos
 
-    integer :: i
-    real (C_double) :: r(3)
 
     !attaches lammps object to pointer variable lmp
     call lammps_open('lmp -log none -screen none', MPI_COMM_WORLD, lmp)
@@ -34,6 +32,7 @@ contains
     call lammps_command(lmp, 'units metal')
     call lammps_command(lmp, 'boundary p p p')
     call lammps_command(lmp, 'atom_style atomic')
+    call lammps_command(lmp, 'atom_modify map array')
     call lammps_command(lmp, 'lattice bcc 2.8553')
 
     call lammps_command(lmp, 'region box block 0 30 0 30 0 30')
@@ -52,9 +51,11 @@ contains
     !Including necessary computes
     call lammps_command(lmp, 'compute TotEn all pe')
 
-    !accessing the atom positions within lammps
-    call lammps_extract_atom (x, lmp, 'x')
-    if ( .not. associated (x) .and. RANK == 0) write(*,*) 'x is not associated'
+    CALL lammps_gather_atoms(lmp, 'x', 3, pos)
+    
+    do i =1, NATOMC
+        RA(:,i) = pos(3*(i-1)+1: 3*(i-1)+3) / RLAT
+    end do
   
   end subroutine LMP_INIT
 !***********************************************************************!
@@ -66,14 +67,14 @@ contains
 
   integer :: i,j
 
-  if (rank == 0) write(*,'(A)') 'Relaxation'
+  if (rank == 0) write(*,'(A)') 'Starting Relaxation'
 
   !Minimize/relax the system
   call lammps_command(lmp, 'min_style cg')
   call lammps_command(lmp, 'minimize 1.0e-4 1.0e-6 100 1000')
 
   call LMP_ENERGY
-  if (rank ==0) write(*,'(A,F16.5)') 'Total System Energy = ', ENCALC
+  if (rank == 0) write(*,'(A)') 'Ending Relaxation'
 
   !When ONLY relaxing system
   if (TJOB.EQ.1) then
@@ -81,9 +82,11 @@ contains
     !output relaxed system to std_kopt.out
     if (RANK == 0) then
 
-      write(26,*) NATOMC
+      write(*,'(A,F16.5)') 'Total System Energy = ', ENCALC
+
+      write(26,'(I0)') NATOMC
       do i = 1, NATOMC
-        write(26,'(3F14.5)') (RA(j,i), j=1,3)
+        write(26,'(I0, 3F14.5)') I, (RA(j,i), j=1,3)
       end do
     end if
 
@@ -101,9 +104,6 @@ contains
   real*8 :: OENCALC
 
   OENCALC = ENCALC
-
-  !Using 'run 0' to update computes
-  call lammps_command(lmp, 'run 0')
 
   !Might not need to extract pe everytime. It is already bound
   call lammps_extract_compute (pe, lmp, 'TotEn', &
@@ -124,7 +124,7 @@ contains
 
   !m: mass of system atoms in grams/mole
   !E: energy of pka in eV
-  real*8 :: m, E
+  real*8 :: m, E, i
   !v: magnitude of velocity in angs/picosec
   !vx: x component of velocity
   !rnd: random number
@@ -136,6 +136,8 @@ contains
   !s_rnd: random number str
   !S_TEMP: TEMP str
   character (len = 200):: str, s_rnd, s_TEMP
+  !pos: communicating atom positions with lammps
+  real*8, dimension(:) :: pos(3*NATOMC)
 
   m = 56
   E = 1000
@@ -198,7 +200,6 @@ contains
   !Relax system
   if (rank == 0) write(*,'(A)') 'Zeroing atom velocities'
   call lammps_command(lmp, 'velocity all zero linear')
-  call LMP_RELAX
 
   end subroutine LMP_CASCADE
 !***********************************************************************!

@@ -1,12 +1,12 @@
 #Change LMPLIB with directory with LAMMPS static library
 LMPSRC = /home/achavira/software/lammps/src/
-LMPLIB = /home/achavira/software/lammps/buildMB/liblammps_linux.a
+LMPLIB = /home/achavira/software/lammps/build/liblammps_linux.a
 LMPCWRAP = ./LAMMPS-wrapper.o
 LMPFLIB = ./LAMMPS.o
 
 OBJS = LAMMPS.o LAMMPS-wrapper.o DEFINE.o LMP.o INIT.o FUNCT.o FORCE.o DIMER.o MAIN.o OPT.o AKMC.o FINAL.o
 FLAGS = -O3 -g -fopenmp -std=legacy
-LIBS = -lgomp -lmpi_cxx -lstdc++ -lm
+LIBS = -lgomp -lstdc++ -lm -ldl -ljpeg -lpng
 
 opld: $(OBJS)
 	mpifort $(FLAGS) -o  $@  $^ $(LMPLIB) $(LIBS)
