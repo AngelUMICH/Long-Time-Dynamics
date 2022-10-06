@@ -374,8 +374,6 @@
       IMPLICIT NONE
 
       INTEGER I,J,NSTMP
-      REAL*8, DIMENSION(:) :: POS1(3*NATOMC)
-      real*8, dimension(:), allocatable :: pos2
 
       IF (RANK.EQ.0) THEN
 
@@ -401,27 +399,14 @@
 
       END IF
 
-!BCAST ATOM POSITIONS
-
       CALL MPI_BCAST(RA, 3*(NATOMC+NDEMAX), MPI_REAL8, 0, 
      #              MPI_COMM_WORLD, IERR)
 
-      DO I= 1,NATOMC
-        POS1(3*(I-1)+1: 3*(I-1)+3) = RA(:,I) * RLAT
-      END DO
-
-      CALL lammps_scatter_atoms(lmp, 'x', POS1)
-
-!OPTIMIZATION
+      CALL SEND_OPLD_POS
 
       CALL LMP_RELAX
 
-!Update OPLD system with lammps relaxation
-      call lammps_gather_atoms(lmp, 'x', 3, pos2)
-
-      DO I =1, NATOMC
-        RA(:,I) = pos2(3*(I-1)+1: 3*(I-1)+3) / RLAT
-      end do
+      CALL RECV_LMP_POS
 
       IF (RANK .EQ. 0) THEN
 
@@ -1190,8 +1175,6 @@
 
       INTEGER :: I
       REAL*8 SIM_DOSE,DOSE_RATE, DTIME
-      REAL*8, DIMENSION(:) :: POS1(3*NATOMC)
-      real*8, dimension(:), allocatable :: pos2
 
       SIM_DOSE = 100.d0/FLOAT(NATOMC) !NUMBER OF DEFECTS CREATED/TOTAL ATOMS
       DOSE_RATE = 1E0 !dpa/s
@@ -1199,21 +1182,13 @@
 
       IF(TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 0) THEN
 
-        DO I= 1,NATOMC
-          POS1(3*(I-1)+1: 3*(I-1)+3) = RA(:,I) * RLAT
-        END DO
-
-        CALL lammps_scatter_atoms(lmp, 'x', POS1)
+        CALL SEND_OPLD_POS
 
         CALL LMP_CASCADE
 
         CALL LMP_RELAX
 
-        call lammps_gather_atoms(lmp, 'x', 3, pos2)
-
-        DO I =1, NATOMC
-          RA(:,I) = pos2(3*(I-1)+1: 3*(I-1)+3) / RLAT
-        end do
+        CALL RECV_LMP_POS
 
         IF (RANK .EQ. 0) WRITE(*,*) 'TIME=',TIME,'TIME_LAST=',
      #                                    TIME_LAST,'DTIME=',DTIME

@@ -22,8 +22,6 @@ contains
 
     implicit none
     integer :: i, j
-    real*8, DIMENSION(:), allocatable :: pos
-
 
     !attaches lammps object to pointer variable lmp
     call lammps_open('lmp -log none -screen none', MPI_COMM_WORLD, lmp)
@@ -51,11 +49,7 @@ contains
     !Including necessary computes
     call lammps_command(lmp, 'compute TotEn all pe')
 
-    CALL lammps_gather_atoms(lmp, 'x', 3, pos)
-    
-    do i =1, NATOMC
-        RA(:,i) = pos(3*(i-1)+1: 3*(i-1)+3) / RLAT
-    end do
+    CALL RECV_LMP_POS
   
   end subroutine LMP_INIT
 !***********************************************************************!
@@ -202,5 +196,39 @@ contains
   call lammps_command(lmp, 'velocity all zero linear')
 
   end subroutine LMP_CASCADE
+!***********************************************************************!
+  subroutine RECV_LMP_POS
+  
+  use SYSTEM, only: NATOMC, RA, RLAT
+
+  implicit none
+
+  integer:: i
+  real*8, dimension(:), allocatable :: pos
+
+  call lammps_gather_atoms(lmp, 'x', 3, pos)
+
+  DO I =1, NATOMC
+    RA(:,i) = pos(3*(i-1)+1: 3*(i-1)+3) / RLAT
+  end do
+
+  end subroutine RECV_LMP_POS
+!***********************************************************************!
+  subroutine SEND_OPLD_POS
+
+  use SYSTEM, only: NATOMC, RA, RLAT
+  
+  implicit none
+
+  integer:: i
+  real*8, dimension(:) :: pos(3*NATOMC)
+
+  DO I= 1,NATOMC
+    pos(3*(i-1)+1: 3*(i-1)+3) = RA(:,i) * RLAT
+  END DO
+
+  CALL lammps_scatter_atoms(lmp, 'x', pos)
+
+  end subroutine SEND_OPLD_POS
 !***********************************************************************!
 end module LMP_DRIVER
