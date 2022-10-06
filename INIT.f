@@ -158,8 +158,6 @@
 
       RBH2       =-RBOX/2.0D0
 
-      NFRAME     = 0
-
 !!POTENTIAL CUTOFF:PAIR TERM
 
       PCUTR      = PCUTR/RLAT
