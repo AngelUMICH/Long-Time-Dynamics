@@ -912,6 +912,8 @@
 
         NTEMP = NTEMP + 1
 
+        PTEMP(4,I) = 4.2 + 0.866*abs(PTEMP(6,I))**(1.0/3.0)
+
         PTEMP(:,NTEMP) = PX(:,I)
 
         ENDIF
@@ -1142,7 +1144,7 @@
 
         SKIP = .TRUE.
 
-        WRITE(STR,'(A)') EMSKIP
+        WRITE(STR,'(F8.5)') EMSKIP
 
         WRITE(6,*) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)//
      #              'eV -> SKIPPING'
