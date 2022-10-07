@@ -25,8 +25,6 @@
       INTEGER I,J
       real*8, dimension(:), allocatable :: pos2
 
-      CALL DOSE
-
       DO ISTEP = 1,NTSTEP
 
         IF (RANK .EQ. 0) THEN

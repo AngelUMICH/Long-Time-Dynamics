@@ -128,7 +128,7 @@ contains
   !str: general string
   !s_rnd: random number str
   !S_TEMP: TEMP str
-  character (len = 200):: str, s_rnd, s_TEMP
+  character (len = 200):: str, s_rnd, s_TEMP, s_PKA
   !pos: communicating atom positions with lammps
   real*8, dimension(:) :: pos(3*NATOMC)
 
@@ -143,6 +143,9 @@ contains
   rnd = floor(rnd * 100000000)
   write(s_rnd,*) int(rnd)
   write(s_TEMP,'(F9.3)') TEMP
+  call random_number(rnd)
+  rnd = ceiling(rnd * NATOMC)
+  write(s_PKA,'(3F9.3)') RA(:,int(rnd))
 
   call lammps_command(lmp, 'velocity all create '//trim(s_TEMP)//' '&
                             //trim(s_rnd)//' dist gaussian mom yes rot yes')
@@ -168,9 +171,10 @@ contains
   vz = vz * v
   write(str,'(F9.3, X, F9.3, X, F9.3)') vx, vy, vz
   call MPI_BCAST(str, 200, MPI_CHAR, 0, MPI_COMM_WORLD, IERR)
+  call MPI_BCAST(s_PKA, 200, MPI_CHAR, 0, MPI_COMM_WORLD, IERR)
 
   !Initializing PKA setup
-  call lammps_command(lmp, 'region PKACHOOSING sphere 15 15 15 0.2 units lattice')
+  call lammps_command(lmp, 'region PKACHOOSING sphere '//trim(s_PKA)//' 0.2 units lattice')
   call lammps_command(lmp, 'group  PKA region PKACHOOSING')
   call lammps_command(lmp, 'velocity PKA set '//trim(str)//' units box')
 
