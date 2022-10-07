@@ -428,7 +428,7 @@
 
         CALL FIND_DEFECT
 
-        IF (MOD(ISTEP,20) .EQ. 0) THEN
+        IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
 
           CALL OVITO
 
@@ -1064,6 +1064,8 @@
 
       REAL*8 RND,dt,scalef,prop
 
+      CHARACTER(LEN=40) STR
+
       IF (RANK .EQ. 0) THEN
 
 !FQSUM:SUM OF FREQUENCY,POSUM:SUM OF PROBABILITIES(FOR CHECK ONLY)
@@ -1134,7 +1136,7 @@
 
 !CHECKING FOR TOO HIGH TRANSITION ENERGY
 
-      IF (EM(EID,JID) .LE. 0.8 .AND. EID .LE. NDIMER) THEN
+      IF (EM(EID,JID) .LE. EMSKIP .AND. EID .LE. NDIMER) THEN
 
         TIME = TIME + TMEAN
 
@@ -1142,7 +1144,10 @@
 
         SKIP = .TRUE.
 
-        WRITE(6,*) 'MIGRATION ENERGY GREATER THAN 0.8eV -> SKIPPING'
+        WRITE(STR,'(A)') EMSKIP
+
+        WRITE(6,*) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)//
+     #              'eV -> SKIPPING'
 
       ENDIF
 
@@ -1173,14 +1178,15 @@
 
       IMPLICIT NONE
 
-      INTEGER :: I
-      REAL*8 SIM_DOSE,DOSE_RATE, DTIME
-
-      SIM_DOSE = 100.d0/FLOAT(NATOMC) !NUMBER OF DEFECTS CREATED/TOTAL ATOMS
-      DOSE_RATE = 1E0 !dpa/s
-      DTIME = SIM_DOSE/DOSE_RATE
-
       IF(TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 0) THEN
+
+        IF (RANK .EQ. 0) THEN
+
+          WRITE(*,'(3A14)') 'TIME',' TIME_LAST',' DTIME'
+
+          WRITE(*,'(2F14.3,SE14.3)') TIME, TIME_LAST, DTIME
+
+        END IF
 
         CALL SEND_OPLD_POS
 
@@ -1190,8 +1196,6 @@
 
         CALL RECV_LMP_POS
 
-        IF (RANK .EQ. 0) WRITE(*,*) 'TIME=',TIME,'TIME_LAST=',
-     #                                    TIME_LAST,'DTIME=',DTIME
           TIME_LAST = TIME
 
       ENDIF

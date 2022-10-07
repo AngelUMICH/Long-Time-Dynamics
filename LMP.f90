@@ -117,8 +117,7 @@ contains
   implicit none
 
   !m: mass of system atoms in grams/mole
-  !E: energy of pka in eV
-  real*8 :: m, E, i
+  real*8 :: m
   !v: magnitude of velocity in angs/picosec
   !vx: x component of velocity
   !rnd: random number
@@ -134,9 +133,8 @@ contains
   real*8, dimension(:) :: pos(3*NATOMC)
 
   m = 56
-  E = 1000
-  eV_J = 1.6E-19
-  amu_kg = 1.66E-27
+  eV_J = 1.6E-19 !energy conversion factor
+  amu_kg = 1.66E-27 !mass conversion factor
 
   !Bring system to temperature
   if (rank == 0) write(*,'(A)') 'Starting cascade simulation'
@@ -155,7 +153,7 @@ contains
   call lammps_extract_compute (compute, lmp, 'thermo_temp', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
 
   !Determining velocity vector for PKA
-  v = sqrt(2*E/m)
+  v = sqrt(2*PKAE/m)
   !Convert to angs/picosec
   v = v * sqrt(eV_J/amu_kg) * 1E-2
 
@@ -179,7 +177,7 @@ contains
   if (rank == 0) then
     write(*,'(A)') '!*********************************Cascade Info********************************************!'
     write(*,'(A18, A25, 4A12)') 'PKA Energy (eV)', 'Velocity (ang/picosec)', 'Vx', 'Vy', 'Vz', 'Temp (K)'
-    write(*,'(F18.5, F25.5, 4F12.3)') E, v, vx, vy, vz, compute
+    write(*,'(F18.5, F25.5, 4F12.3)') PKAE, v, vx, vy, vz, compute
     write(*,*)
     if (abs(compute - TEMP) > 5) write(*,'(A,F8.3,A)') 'Warning: System temp has not reached ', TEMP, ' K'
     write(*,'(A)') '!*****************************************************************************************!'
