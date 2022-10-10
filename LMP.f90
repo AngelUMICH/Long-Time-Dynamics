@@ -9,8 +9,10 @@ module LMP_DRIVER
   type (C_ptr) :: lmp
   !pe:  potential energy
   real (C_double), pointer :: pe => NULL()
-  !compute: a lammps compute value
-  real (C_double), pointer :: compute => NULL()
+  !lmpTemp: current measurement of system temperature
+  real (C_double), pointer :: lmpTemp => NULL()
+  !lmpEnergy: current measurement of system energy
+  real (C_double), pointer :: lmpEnergy => NULL()
 
 !***********************************************************************!
 contains
@@ -48,6 +50,13 @@ contains
 
     !Including necessary computes
     call lammps_command(lmp, 'compute TotEn all pe')
+
+    !Initiating system values
+    call lammps_command(lmp, 'run 0')
+
+    !Extracting MD values
+    call lammps_extract_compute (lmpTemp, lmp, 'thermo_temp', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
+    call lammps_extract_compute (lmpEnergy, lmp, 'thermo_pe', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
 
     CALL RECV_LMP_POS
   
@@ -117,7 +126,10 @@ contains
   implicit none
 
   !m: mass of system atoms in grams/mole
-  real*8 :: m
+  !b: border thickness in lattice units
+  !ETOL: energy tolerance (eV) for cascade
+  !TTOL: temperature tolerance (K) for equilibration
+  real*8 :: m, b, ETOL, TTOL
   !v: magnitude of velocity in angs/picosec
   !vx: x component of velocity
   !rnd: random number
@@ -125,16 +137,80 @@ contains
   !ev_J: conversion from 1 eV to Joules
   !amu_kg: conversion of 1 amu to kilograms
   real*8 :: eV_J, amu_kg
+  !d_TEMP: temperature difference
+  !d_Energy: energy difference
+  !lastEnergy: previous energy measurement
+  real*8 :: d_TEMP, d_Energy, lastEnergy
+  !xDist,yDist,zDist
+  real*8 :: xDist, yDist, zDist
   !str: general string
   !s_rnd: random number str
-  !S_TEMP: TEMP str
-  character (len = 200):: str, s_rnd, s_TEMP, s_PKA
-  !pos: communicating atom positions with lammps
-  real*8, dimension(:) :: pos(3*NATOMC)
+  !s_TEMP: TEMP str
+  !s_border: selected border
+  character (len = 200):: str, s_rnd, s_TEMP, s_PKA, s_border
 
   m = 56
+  b = 2.1
+  ETOL = 15
+  TTOL = 5
   eV_J = 1.6E-19 !energy conversion factor
   amu_kg = 1.66E-27 !mass conversion factor
+
+  !Setting up regions and groups
+
+  !PKA selection
+  call random_number(rnd)
+  rnd = ceiling(rnd * NATOMC)
+  write(s_PKA,'(3F10.3)') RA(:,int(rnd))
+  call MPI_BCAST(s_PKA, 200, MPI_CHAR, 0, MPI_COMM_WORLD, IERR)
+
+  call lammps_command(lmp, 'region PKACHOOSING sphere '//trim(s_PKA)//' 0.2 units lattice')
+  call lammps_command(lmp, 'group  PKA region PKACHOOSING')
+
+  !Border group selection
+  xDist = RA(1,int(rnd)) - RBH1
+  yDist = RA(2,int(rnd)) - RBH1
+  zDist = RA(3,int(rnd)) - RBH1
+
+  if (abs(xDist) .le. min(abs(yDist), abs(zDist))) then
+    if (xDist .ge. 0) then
+      !'xlo'
+      write(str,'(A,F10.3,A)') '0 ', b, ' INF INF INF INF'
+      s_border = 'xlo'
+    else
+      !'xhi'
+      write(str,'(F10.3,A)') RBOX-b, ' INF INF INF INF INF'
+      s_border = 'xhi'
+    end if
+  else if (abs(yDist) .le. min(abs(xDist), abs(zDist))) then
+    if (yDist .ge. 0) then
+      !'ylo'
+      write(str,'(A,F10.3,A)') 'INF INF 0 ', b, ' INF INF'
+      s_border = 'ylo'
+    else
+      !'yhi'
+      write(str,'(A,F10.3,A)') 'INF INF ', RBOX-b, ' INF INF INF'
+      s_border = 'yhi'
+    end if
+  else if (abs(zDist) .le. min(abs(xDist), abs(yDist))) then
+    if (zDist .ge. 0) then
+      !'zlo'
+      write(str,'(A,F10.3)') 'INF INF INF INF 0 ', b
+      s_border = 'zlo'
+    else
+      !'zhi'
+      write(str,'(A,F10.3,A)') 'INF INF INF INF ', RBOX-b, ' INF'
+      s_border = 'zhi'
+    end if
+  end if
+
+  call MPI_BCAST(str, 200, MPI_CHAR, 0, MPI_COMM_WORLD, IERR)
+  
+  call lammps_command(lmp, 'region border block '//trim(str)//' units lattice')
+  call lammps_command(lmp, 'group border region border')
+  call lammps_command(lmp, 'group cascadeRegion subtract all border')
+
+  !Starting dynamics
 
   !Bring system to temperature
   if (rank == 0) write(*,'(A)') 'Starting cascade simulation'
@@ -143,18 +219,23 @@ contains
   rnd = floor(rnd * 100000000)
   write(s_rnd,*) int(rnd)
   write(s_TEMP,'(F9.3)') TEMP
-  call random_number(rnd)
-  rnd = ceiling(rnd * NATOMC)
-  write(s_PKA,'(3F9.3)') RA(:,int(rnd))
 
   call lammps_command(lmp, 'velocity all create '//trim(s_TEMP)//' '&
                             //trim(s_rnd)//' dist gaussian mom yes rot yes')
   call lammps_command(lmp, 'fix fixnpt all npt temp '//trim(s_TEMP)//' '&
                             //trim(s_TEMP)//' 0.1 iso 0 0 0.1')
-  call lammps_command(lmp, 'run 2500')
-  call lammps_command(lmp, 'unfix fixnpt')
-  call lammps_extract_compute (compute, lmp, 'thermo_temp', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
 
+  d_TEMP = 100
+
+  do while (abs(d_TEMP) > TTOL)
+    if (rank .eq. 0) write(*,'(A)') 'Running temp equilibration for 2500 steps'
+    call lammps_command(lmp, 'run 2500')
+    d_TEMP = TEMP - lmpTemp
+    if (rank .eq. 0) write(*,'(A,F10.3)') 'Temperature diff: ', d_TEMP
+  end do
+
+  call lammps_command(lmp, 'unfix fixnpt')
+  
   !Determining velocity vector for PKA
   v = sqrt(2*PKAE/m)
   !Convert to angs/picosec
@@ -171,29 +252,48 @@ contains
   vz = vz * v
   write(str,'(F9.3, X, F9.3, X, F9.3)') vx, vy, vz
   call MPI_BCAST(str, 200, MPI_CHAR, 0, MPI_COMM_WORLD, IERR)
-  call MPI_BCAST(s_PKA, 200, MPI_CHAR, 0, MPI_COMM_WORLD, IERR)
-
-  !Initializing PKA setup
-  call lammps_command(lmp, 'region PKACHOOSING sphere '//trim(s_PKA)//' 0.2 units lattice')
-  call lammps_command(lmp, 'group  PKA region PKACHOOSING')
+  
+  !Set PKA to velocity
   call lammps_command(lmp, 'velocity PKA set '//trim(str)//' units box')
 
   if (rank == 0) then
-    write(*,'(A)') '!*********************************Cascade Info********************************************!'
-    write(*,'(A18, A25, 4A12)') 'PKA Energy (eV)', 'Velocity (ang/picosec)', 'Vx', 'Vy', 'Vz', 'Temp (K)'
-    write(*,'(F18.5, F25.5, 4F12.3)') PKAE, v, vx, vy, vz, compute
+    write(*,'(A)') '!**************************Cascade Info**************************!'
+    write(*,'(A18, A11, A18, A19)') 'PKA Energy (eV)', 'Velocity', 'System Temp (K)', 'Border Selection'
+    write(*,'(F18.5, F11.3, F18.3, A19)') PKAE, v, lmpTemp, trim(s_border)
     write(*,*)
-    if (abs(compute - TEMP) > 5) write(*,'(A,F8.3,A)') 'Warning: System temp has not reached ', TEMP, ' K'
-    write(*,'(A)') '!*****************************************************************************************!'
+    write(*,'(6A10)') 'X', 'Y', 'Z', 'Vx', 'Vy', 'Vz'
+    write(*,'(A,3F10.3)') trim(s_PKA), vx, vy, vz
+    write(*,*)
+    write(*, '(A)') 'Positions Units: (lattice units)    Velocity Units: (ang/ps)'
+    write(*,*)
+    if (abs(lmpTemp - TEMP) > 5) write(*,'(A,F8.3,A)') 'Warning: System temp has not reached ', TEMP, ' K'
+    write(*,'(A)') '!****************************************************************!'
   end if
 
-  !Running cascade simulation
-  call lammps_command(lmp, 'fix fixcascade all nve')
-  call lammps_command(lmp, 'run 5000')
-  call lammps_command(lmp, 'unfix fixcascade')
+  call lammps_command(lmp, 'fix cascade cascadeRegion nve')
+  call lammps_command(lmp, 'fix EnergyControl border nvt temp '//trim(s_TEMP)&
+                            //' '//trim(s_TEMP)//' 0.1')
+  call lammps_command(lmp, 'adaptivedt all dt/reset 10 1.0E-10 2.0E-3 0.02 units box')
+  
+  !Needed to begin dynamics
+  d_Energy = 100
+  lastEnergy = 0
+
+  do while (abs(d_Energy) > ETOL)
+    if (rank .eq. 0) write(*,'(A)') 'Running dynamics for 5000 steps'
+    call lammps_command(lmp, 'run 5000')
+    d_Energy = lmpEnergy - lastEnergy
+    if (rank .eq. 0) write(*,'(A,F14.3)') 'Energy diff: ', d_Energy
+    lastEnergy = lmpEnergy
+  end do
+
+  call lammps_command(lmp, 'unfix cascade')
+  call lammps_command(lmp, 'unfix EnergyControl')
+  call lammps_command(lmp, 'unfix adaptivedt')
+
   if (rank == 0) write(*,'(A)') 'Finished cascade simulation'
 
-  !Relax system
+  !Ready system for minimization
   if (rank == 0) write(*,'(A)') 'Zeroing atom velocities'
   call lammps_command(lmp, 'velocity all zero linear')
 
