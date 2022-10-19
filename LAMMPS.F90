@@ -508,8 +508,8 @@ module LAMMPS
          import :: C_ptr, C_int64_t, C_double, C_int
          type (C_ptr), value :: ptr
          integer (C_int), value :: n
-         integer (C_tagint) :: id
-         integer (C_int) :: type
+         integer (C_int), dimension(*) :: type
+         integer (C_tagint), dimension(*) :: id
          real (C_double), dimension(*) :: x, v
          integer (C_imageint), dimension(*) :: image
          integer (C_int), value :: shrinkexceed
@@ -1367,7 +1367,7 @@ contains !! Wrapper functions local to this module {{{1
 
    subroutine lammps_create_atoms (ptr, id, type, x, v, image, shrinkexceed)
       type (C_ptr), intent(in) :: ptr
-      integer (kind=C_tagint), dimension(:), optional :: id
+      integer, dimension(:), optional :: id
       integer, dimension(:) :: type
       double precision, dimension(:,:) :: x
       double precision, dimension(:,:), optional :: v
@@ -1375,9 +1375,9 @@ contains !! Wrapper functions local to this module {{{1
       logical, optional :: shrinkexceed
       real (C_double), dimension(size(x)) :: C_x, C_v
       integer (C_int) :: C_shrinkexceed, n
-      integer (kind=C_tagint) :: C_id
+      integer (kind=C_tagint), dimension(size(x)/3) :: C_id
       integer (C_imageint), dimension(size(x)/3) :: C_image
-      integer (C_int) :: C_type
+      integer (C_int), dimension(size(x)/3) :: C_type
       if (shrinkexceed) then
          C_shrinkexceed = 1_C_int
       else
@@ -1394,7 +1394,11 @@ contains !! Wrapper functions local to this module {{{1
       else
          C_image = int(0,kind=C_imageint)
       end if
+      if ( present(id) ) then
+         C_id = id
+      end if
       n = size(type)
+      C_type = type
       call lammps_actual_create_atoms (ptr, n, C_id, C_type, C_x, C_v, &
          C_image, C_shrinkexceed)
    end subroutine lammps_create_atoms

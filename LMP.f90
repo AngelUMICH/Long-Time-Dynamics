@@ -6,7 +6,9 @@ module LMP_DRIVER
   implicit none
 
   !lmp: interactable LAMMPS object
+  !lmpDimer: LAMMPS object for dimer searches
   type (C_ptr) :: lmp
+  type (C_ptr) :: lmpDimer
   !pe:  potential energy
   real (C_double), pointer :: pe => NULL()
   !lmpTemp: current measurement of system temperature
@@ -58,9 +60,44 @@ contains
     call lammps_extract_compute (lmpTemp, lmp, 'thermo_temp', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
     call lammps_extract_compute (lmpEnergy, lmp, 'thermo_pe', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
 
-    CALL RECV_LMP_POS
+    call RECV_LMP_POS
+
+    !Initializing the Dimer LAMMPS instances
+    call LMP_DIMER_INIT
   
   end subroutine LMP_INIT
+!***********************************************************************!
+  subroutine LMP_DIMER_INIT
+
+    use MPI
+    use SYSTEM
+
+    implicit none
+
+    !attaches lammps object to pointer variable lmp
+    call lammps_open('lmp -log none -screen none', DIMER_COMM, lmpDimer)
+
+    !Setting up system in LAMMPS space
+    call lammps_command(lmpDimer, 'units metal')
+    call lammps_command(lmpDimer, 'boundary p p p')
+    call lammps_command(lmpDimer, 'atom_style atomic')
+    call lammps_command(lmpDimer, 'atom_modify map array')
+    call lammps_command(lmpDimer, 'lattice bcc 2.8553')
+
+    call lammps_command(lmpDimer, 'region box block 0 30 0 30 0 30')
+    call lammps_command(lmpDimer, 'create_box 1 box')
+    !call lammps_command(lmpDimer, 'create_atoms 1 box')
+    call lammps_command(lmpDimer, 'mass 1 56.0')
+
+    call lammps_command(lmpDimer, 'pair_style eam/fs')
+    call lammps_command(lmpDimer, 'pair_coeff * * FeP_mm.eam.fs Fe')
+    call lammps_command(lmpDimer, 'neighbor 0 bin')
+
+    call lammps_command(lmpDimer, 'timestep 0.001')
+    call lammps_command(lmpDimer, 'thermo 200')
+
+  end subroutine LMP_DIMER_INIT
+
 !***********************************************************************!
   subroutine LMP_RELAX
 
@@ -151,7 +188,7 @@ contains
 
   m = 56
   b = 2.1
-  ETOL = 15
+  ETOL = 30
   TTOL = 5
   eV_J = 1.6E-19 !energy conversion factor
   amu_kg = 1.66E-27 !mass conversion factor
@@ -273,15 +310,15 @@ contains
   call lammps_command(lmp, 'fix cascade cascadeRegion nve')
   call lammps_command(lmp, 'fix EnergyControl border nvt temp '//trim(s_TEMP)&
                             //' '//trim(s_TEMP)//' 0.1')
-  call lammps_command(lmp, 'adaptivedt all dt/reset 10 1.0E-10 2.0E-3 0.02 units box')
+  call lammps_command(lmp, 'fix adaptivedt all dt/reset 10 1.0E-10 2.0E-3 0.02 units box')
   
   !Needed to begin dynamics
-  d_Energy = 100
+  d_Energy = 1.0E12
   lastEnergy = 0
 
   do while (abs(d_Energy) > ETOL)
-    if (rank .eq. 0) write(*,'(A)') 'Running dynamics for 5000 steps'
-    call lammps_command(lmp, 'run 5000')
+    if (rank .eq. 0) write(*,'(A)') 'Running dynamics for 2500 steps'
+    call lammps_command(lmp, 'run 2500')
     d_Energy = lmpEnergy - lastEnergy
     if (rank .eq. 0) write(*,'(A,F14.3)') 'Energy diff: ', d_Energy
     lastEnergy = lmpEnergy
