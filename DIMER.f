@@ -262,6 +262,8 @@
 
       SUBROUTINE DIMER_INIT(THIS,IX,IY,IZ,RC)
 
+      USE LMP_DRIVER
+
       USE SYSTEM
 
       IMPLICIT NONE
@@ -576,6 +578,14 @@
 
       CALL DIMER_UNIT(THIS%VN,THIS%NATOM1)
 
+!SEND DEFECT POSITIONS TO LMPDIMER
+
+      CALL CREATE_ATOMS(THIS)
+
+!CREATE COMPUTE FOR DETERMINING PER ATOM POTENTIAL ENERGY
+      !PRINT *, 'MAKING COMPUTE', RANK
+      CALL LAMMPS_COMMAND(lmpDimer, 'compute peratom all pe/atom')
+
       RETURN
 
       END SUBROUTINE DIMER_INIT
@@ -674,9 +684,14 @@
 
       SUBROUTINE DIMER_FINISH(THIS)
 
+      USE LMP_DRIVER
+
       IMPLICIT NONE
 
       TYPE(DIMER),INTENT(INOUT) :: THIS
+
+      !REMOVE THE SYSTEM FROM THE DIMER LAMMPS INSTANCE
+      CALL LAMMPS_COMMAND(lmpDimer, 'delete_atoms group all')
 
 !$OMP CRITICAL
 
@@ -755,7 +770,7 @@
 
 !!CALCULATE INITIAL ENERGY
 
-      CALL DIMER_FORCE(THIS)
+      CALL DIMER_FORCE_LMP(THIS)
 
       THIS%ENINIT = THIS%ENCALC
 
@@ -763,7 +778,7 @@
 
       DO WHILE(THIS%DI_CON.EQV..FALSE.)
 
-        CALL DIMER_FORCE(THIS)
+        CALL DIMER_FORCE_LMP(THIS)
 
 !!AVOID THE FIRST SEVERAL STEPS
 
@@ -896,7 +911,7 @@
 
 !!CALCULATE THE FORCE AND ENERGY OF THE SADDLE POINT
 
-      CALL DIMER_FORCE(THIS)
+      CALL DIMER_FORCE_LMP(THIS)
 
 !!CALCULATE ENERGY BARRIER
 
@@ -1446,6 +1461,48 @@
 
       END SUBROUTINE DIMER_FORCE
 !***********************************************************************!
+!ENERGY AND FORCES ARE NEEDED FOR ATOMS UP TO NATOM1
+      SUBROUTINE DIMER_FORCE_LMP(THIS)
+
+      USE LMP_DRIVER
+
+      IMPLICIT NONE
+
+      TYPE(DIMER), INTENT(INOUT) :: THIS
+      REAL (C_double), DIMENSION(:), POINTER :: ENERGY => NULL()
+      REAL*8, DIMENSION(:), ALLOCATABLE :: F
+      INTEGER :: I
+
+      THIS%EN = 0.0D0
+
+      THIS%FC = 0.0D0
+
+      THIS%ENCALC = 0.0D0
+
+      !UPDATE LAMMPS INSTANCE POSITIONS
+      CALL SEND_POS(THIS)
+
+      !UPDATE ALL VALUES
+      CALL LAMMPS_COMMAND(lmpDimer, 'run 0')
+
+      !CALCULATE ENERGY
+      CALL LAMMPS_EXTRACT_COMPUTE(ENERGY, lmpDimer, 'peratom',
+     #                              LMP_STYLE_ATOM, LMP_TYPE_VECTOR)
+
+      !CALCULATE FORCES
+      calL LAMMPS_GATHER_ATOMS(lmpDimer, 'f', 3, F)
+
+      DO I = 1, THIS%NATOM1
+
+            THIS%ENCALC = THIS%ENCALC + ENERGY(I)
+
+            THIS%FC(1:3,I) = F(3*(I-1)+1: 3*(I-1)+3)
+
+      END DO
+
+      END SUBROUTINE DIMER_FORCE_LMP
+
+!***********************************************************************!
 !!UPDATE THE FORCE OF THE DIMER
 
       SUBROUTINE DIMER_UPDATE(THIS)
@@ -1529,7 +1586,53 @@
 
       END SUBROUTINE DIMER_TRANSFORM
 !***********************************************************************!
+!USED TO INITIATE ATOMS IN THE DIMER LAMMPS INSTANCE
+      SUBROUTINE CREATE_ATOMS(THIS)
 
+      USE LMP_DRIVER
+      USE SYSTEM, ONLY: RLAT
+
+      IMPLICIT NONE
+
+      TYPE(DIMER), INTENT(IN) :: THIS
+      
+      REAL*8, DIMENSION(3,THIS%NATOMT) :: X
+      INTEGER, DIMENSION(THIS%NATOMT) :: TYPE, ID
+      INTEGER :: I
+
+      !ALL ATOMS ARE OF TYPE 1
+      TYPE = 1
+      
+      DO I = 1, THIS%NATOMT
+        X(:,I) = THIS%XA(:,I) * RLAT
+        ID(I) = I
+      END DO
+
+      CALL LAMMPS_CREATE_ATOMS(lmpDimer,ID=ID,TYPE=TYPE,X=X,
+     #                             shrinkexceed=.FALSE.)
+
+      END SUBROUTINE CREATE_ATOMS 
+!***********************************************************************!
+      SUBROUTINE SEND_POS(THIS)
+
+      USE LMP_DRIVER
+      USE SYSTEM, ONLY: RLAT
+
+      IMPLICIT NONE
+
+      TYPE(DIMER), INTENT(IN) :: THIS
+      INTEGER :: I
+
+      REAL*8, DIMENSION(:) :: POS(3*THIS%NATOMT)
+      
+      DO I = 1, THIS%NATOMT
+        POS(3*(I-1)+1: 3*(I-1)+3) = THIS%XA(:,I) * RLAT
+      END DO
+
+      CALL lammps_scatter_atoms(lmpDimer, 'x', POS)
+
+      END SUBROUTINE SEND_POS
+!***********************************************************************!
       END MODULE CLASS_DIMER
 
 !***********************************************************************!

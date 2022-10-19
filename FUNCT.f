@@ -188,6 +188,28 @@
         ENDIF
 
       ENDDO
+      
+!!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
+
+      DO I=1,NATOMC
+
+        IF(TI(I).NE.1) THEN
+
+          NDINT = NDINT + 1
+
+        ENDIF
+
+      ENDDO
+
+      DO I=1,NATOMR
+
+        IF(TV(I).NE.1) THEN
+
+          NDVAC = NDVAC + 1
+
+        ENDIF
+
+      ENDDO
 
 !!COMPARE THE CURRENT LATTICE WITH THE REFERENCE LATTICE
 
