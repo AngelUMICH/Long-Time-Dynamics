@@ -59,6 +59,10 @@
 
       INTEGER IX,IY,IZ,JX,JY,JZ,RX1,RY1,RZ1,RX2,RY2,RZ2
 
+      NDINT = 0
+
+      NDVAC = 0
+
       TI = 0
 
       TV = 0
