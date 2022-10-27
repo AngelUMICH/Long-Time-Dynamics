@@ -1490,13 +1490,15 @@
      #                              LMP_STYLE_ATOM, LMP_TYPE_VECTOR)
 
       !CALCULATE FORCES
-      calL LAMMPS_GATHER_ATOMS(lmpDimer, 'f', 3, F)
+      CALL LAMMPS_GATHER_ATOMS(lmpDimer, 'f', 3, F)
 
       DO I = 1, THIS%NATOM1
 
             THIS%ENCALC = THIS%ENCALC + ENERGY(I)
 
-            THIS%FC(1:3,I) = F(3*(I-1)+1: 3*(I-1)+3)
+            THIS%FC(1,I) = F(3*(I-1)+1)
+            THIS%FC(2,I) = F(3*(I-1)+2)
+            THIS%FC(3,I) = F(3*(I-1)+3)
 
       END DO
 
@@ -1596,7 +1598,7 @@
 
       TYPE(DIMER), INTENT(IN) :: THIS
       
-      REAL*8, DIMENSION(3,THIS%NATOMT) :: X
+      REAL*8, DIMENSION(THIS%NATOMT,3) :: X
       INTEGER, DIMENSION(THIS%NATOMT) :: TYPE, ID
       INTEGER :: I
 
@@ -1604,7 +1606,7 @@
       TYPE = 1
       
       DO I = 1, THIS%NATOMT
-        X(:,I) = THIS%XA(:,I) * RLAT
+        X(I,:) = THIS%XA(:,I) * RLAT
         ID(I) = I
       END DO
 
