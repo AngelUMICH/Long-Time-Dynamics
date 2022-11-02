@@ -276,6 +276,8 @@
 
       INTEGER I,NTEMP
 
+      CHARACTER(LEN=200) S_NATOM1
+
 !!PASSING THE POSITION
 
       THIS%IX = IX
@@ -582,9 +584,19 @@
 
       CALL CREATE_ATOMS(THIS)
 
-!CREATE COMPUTE FOR DETERMINING PER ATOM POTENTIAL ENERGY
-      !PRINT *, 'MAKING COMPUTE', RANK
+!COMPUTING PER ATOM POTENTIAL ENERGY
+      
       CALL LAMMPS_COMMAND(lmpDimer, 'compute peratom all pe/atom')
+
+!SUM REDUCE ONLY NATOM1 POTENTIAL ENERGY
+
+      WRITE(S_NATOM1,'(1I0)') THIS%NATOM1
+
+      CALL LAMMPS_COMMAND(lmpDimer, 'group saddle id 1:'
+     #                    //TRIM(S_NATOM1))
+      
+      CALL LAMMPS_COMMAND(lmpDimer, 
+     #                    'compute pesum saddle reduce sum c_peratom')
 
       RETURN
 
@@ -1469,7 +1481,7 @@
       IMPLICIT NONE
 
       TYPE(DIMER), INTENT(INOUT) :: THIS
-      REAL (C_double), DIMENSION(:), POINTER :: ENERGY => NULL()
+      REAL (C_double), POINTER :: ENERGY => NULL()
       REAL*8, DIMENSION(:), ALLOCATABLE :: F
       INTEGER :: I
 
@@ -1486,21 +1498,21 @@
       CALL LAMMPS_COMMAND(lmpDimer, 'run 0')
 
       !CALCULATE ENERGY
-      CALL LAMMPS_EXTRACT_COMPUTE(ENERGY, lmpDimer, 'peratom',
-     #                              LMP_STYLE_ATOM, LMP_TYPE_VECTOR)
+      CALL LAMMPS_EXTRACT_COMPUTE(ENERGY, lmpDimer, 'pesum',
+     #                              LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
 
       !CALCULATE FORCES
       CALL LAMMPS_GATHER_ATOMS(lmpDimer, 'f', 3, F)
 
       DO I = 1, THIS%NATOM1
 
-            THIS%ENCALC = THIS%ENCALC + ENERGY(I)
-
             THIS%FC(1,I) = F(3*(I-1)+1)
             THIS%FC(2,I) = F(3*(I-1)+2)
             THIS%FC(3,I) = F(3*(I-1)+3)
 
       END DO
+
+      THIS%ENCALC = ENERGY
 
       END SUBROUTINE DIMER_FORCE_LMP
 
