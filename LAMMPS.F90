@@ -891,7 +891,7 @@ contains !! Wrapper functions local to this module {{{1
          return
       else if ( type == 1 ) then
          call lammps_error_all (ptr, FLERR, 'You cannot extract a compute&
-            & array (rank 1) into a rank 2 variable.')
+            & vector (rank 1) into a rank 2 variable.')
          return
       end if
       call lammps_extract_compute_arraysize (ptr, id, style, nr, nc)

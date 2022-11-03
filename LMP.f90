@@ -187,7 +187,7 @@ contains
   character (len = 200):: str, s_rnd, s_TEMP, s_PKA, s_border
 
   m = 56
-  b = 2.1
+  b = 2.5
   ETOL = 30
   TTOL = 5
   eV_J = 1.6E-19 !energy conversion factor
@@ -259,16 +259,17 @@ contains
 
   call lammps_command(lmp, 'velocity all create '//trim(s_TEMP)//' '&
                             //trim(s_rnd)//' dist gaussian mom yes rot yes')
-  call lammps_command(lmp, 'fix fixnpt all npt temp '//trim(s_TEMP)//' '&
-                            //trim(s_TEMP)//' 0.1 iso 0 0 0.1')
+  call lammps_command(lmp, 'fix fixnpt all nvt temp '//trim(s_TEMP)//' '&
+                            //trim(s_TEMP)//' 0.1')
 
   d_TEMP = 100
+    
+  if (rank .eq. 0) write(*,'(A)') 'Running temp equilibration for 2500 step increments'
 
   do while (abs(d_TEMP) > TTOL)
-    if (rank .eq. 0) write(*,'(A)') 'Running temp equilibration for 2500 steps'
     call lammps_command(lmp, 'run 2500')
     d_TEMP = TEMP - lmpTemp
-    if (rank .eq. 0) write(*,'(A,F10.3)') 'Temperature diff: ', d_TEMP
+    if (rank .eq. 0) write(*,'(A,F10.3)') 'Temperature diff: ', abs(d_TEMP)
   end do
 
   call lammps_command(lmp, 'unfix fixnpt')
@@ -316,11 +317,12 @@ contains
   d_Energy = 1.0E12
   lastEnergy = 0
 
+  if (rank .eq. 0) write(*,'(A)') 'Running dynamics for 2500 step increments'
+  
   do while (abs(d_Energy) > ETOL)
-    if (rank .eq. 0) write(*,'(A)') 'Running dynamics for 2500 steps'
     call lammps_command(lmp, 'run 2500')
     d_Energy = lmpEnergy - lastEnergy
-    if (rank .eq. 0) write(*,'(A,F14.3)') 'Energy diff: ', d_Energy
+    if (rank .eq. 0) write(*,'(A,F14.3)') 'Energy diff: ', abs(d_Energy)
     lastEnergy = lmpEnergy
   end do
 
