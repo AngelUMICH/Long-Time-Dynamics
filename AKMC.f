@@ -27,6 +27,8 @@
 
       DO ISTEP = 1,NTSTEP
 
+        CALL DOSE
+
         IF (RANK .EQ. 0) THEN
 
           CALL DCIDNT
@@ -37,7 +39,7 @@
 
           CALL RSP
 
-        END IF
+        END IF    
 
         CALL SPS
 
@@ -48,8 +50,6 @@
           CALL OPT         
       
         ENDIF
-
-        CALL DOSE
 
         CALL RESTART
 
@@ -396,9 +396,6 @@
         ENDDO
 
       END IF
-
-      CALL MPI_BCAST(RA, 3*(NATOMC+NDEMAX), MPI_REAL8, 0, 
-     #              MPI_COMM_WORLD, IERR)
 
       CALL SEND_OPLD_POS
 
@@ -926,18 +923,24 @@
 
 !RESORTING,PX STORES THE POSITIONS OF THE ACTIVE VOLUMES
 
+      NDSTOT = 0
+
       DO I=1,NDTOT
 
         PX(:,I) = PTEMP(:,I)
 
-      WRITE(*,'(A,I12,6(F14.5),I12)') 'DCIDNT',I,PX(1:6,I),
-     #INT(PX(7,I))
+        WRITE(*,'(A,I12,6(F14.5),I12)') 'DCIDNT',I,PX(1:6,I),
+     #    INT(PX(7,I))
+
+        IF (PX(6,I) .GT. 0) NDSTOT = NDSTOT + PX(6,I)
 
       ENDDO
 
-      IF(TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 1) CALL CALC_DPA
+      IF(CALC) CALL MD_DPA
 
       ONDTOT = NDTOT
+
+      ONDSTOT = NDSTOT
 
 !IF NO DEFECT IS PRESENT, STOP THE PROGRM
 
@@ -1165,6 +1168,8 @@
 
       CALL MPI_BCAST(TIME, 1, MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
 
+      CALL MPI_BCAST(DTIME, 1, MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
+
       CALL MPI_BCAST(SKIP, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, IERR)
 
       RETURN
@@ -1180,7 +1185,7 @@
 
       IMPLICIT NONE
 
-      IF(TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 0) THEN
+      IF(TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 1) THEN
 
         IF (RANK .EQ. 0) THEN
 
@@ -1190,15 +1195,31 @@
 
         END IF
 
-        CALL SEND_OPLD_POS
+        IF (TDAM .EQ. 1) THEN
 
-        CALL LMP_CASCADE
+          CALL SEND_OPLD_POS
 
-        CALL LMP_RELAX
+          CALL LMP_CASCADE
 
-        CALL RECV_LMP_POS
+          CALL LMP_RELAX
+
+          CALL RECV_LMP_POS
+
+        ELSE IF (TDAM .EQ. 2) THEN
+
+          IF (RANK==0) CALL ELECTRON_DAMAGE(NFREKL)
+
+          CALL SEND_OPLD_POS
+
+          CALL LMP_RELAX
+
+          CALL RECV_LMP_POS
+
+        END IF
 
         TIME_LAST = TIME
+
+        IF (RANK==0) CALC = .TRUE.
 
       ENDIF
 
