@@ -357,12 +357,15 @@ contains
 !***********************************************************************!
   subroutine SEND_OPLD_POS
 
-  use SYSTEM, only: NATOMC, RA, RLAT
+  use SYSTEM, only: NATOMC, RA, RLAT, NDEMAX, IERR
+  use MPI
   
   implicit none
 
   integer:: i
   real*8, dimension(:) :: pos(3*NATOMC)
+
+  CALL MPI_BCAST(RA, 3*(NATOMC+NDEMAX), MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
 
   DO I= 1,NATOMC
     pos(3*(i-1)+1: 3*(i-1)+3) = RA(:,i) * RLAT

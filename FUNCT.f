@@ -291,266 +291,222 @@ C      ENDDO
 
       END SUBROUTINE OVITO
 !***********************************************************************!
-      !!CREATES THE SAME AMOUNT OF VACANCIES AND INTERSTITIALS WHICH ARE ADDED TO
-      !!SYSTEM THAT MAY OR MAY NOT HAVE DEFECTS INSIDE ALREADY. DUE TO FITTING
-      !!ISSUES OF DEFECTS THE DESIRED AMOUNT OF DEFECTS MAY NOT BE ACHIEVED BUT
-      !!FRENEKEL PAIRS ARE CREATED.
-      SUBROUTINE FRENKELGENERATOR(NDFRKL)
+      SUBROUTINE ELECTRON_DAMAGE(NFRKL)
 
-      USE SYSTEM,ONLY: RA,RR,NATOMC,RBOX
-      USE DEFECT,ONLY: IV,II,NDINT,NDVAC
+      USE SYSTEM, ONLY: RA,NATOMC,RBOX,RANK,DECUT
+      USE DEFECT, ONLY: IV,II,NDINT,NDVAC
 
       IMPLICIT NONE
 
-      INTEGER NDFRKL, ADD_VACS, ADD_INTS
-      INTEGER I, J, TRIES, ICLOSE
-      INTEGER :: MOVEI(NDFRKL)
-      LOGICAL TOO_CLOSE
-      REAL*8 RX, RY, RZ, RS, RS_LOWEST, RND(3)
-      REAL*8 ::XVAC(NDFRKL), YVAC(NDFRKL), ZVAC(NDFRKL),
-     &         XINT(NDFRKL), YINT(NDFRKL), ZINT(NDFRKL)
+      INTEGER :: I, J, ID, NFRKL, N
+      INTEGER :: MOVEID(NFRKL)
+      REAL *8 :: RX, RY, RZ, RS, PBC, DLIM
+      REAL *8 :: RND, NEWPOS(3)
+      LOGICAL :: FLAG
 
-      !!NDFRKL::NUMBER OF FRENKEL PAIRS TO CREATE
-      !!NDINT:: THE NUMBER OF CURRENT INTERSTITIALS
-      !!NDVAC:: NUMBER OF CURRENT VACANCIES
-      !!RBOX:: SIMULATION SIZE IN LATTICE UNITS
-      !!II::INDEX OF INTERSTITIALS
-      !!IV::INDEX OF VACANCIES
-      !!MOVEI::INDEXES OF ATOMS TO RELOCATE TO CREATE NEW INTERSITITALS
-      !!ADD_VACS::NUMBER OF NEW VACANCIES TO BE CREATED
+      DLIM = DECUT
+      
+      N = 0
 
-      ADD_VACS = 0
-      ADD_INTS = 0
+      MOVEID = 0
 
       CALL RANDOM_SEED()
 
-      !!CREATING THE VACANCIES
-      DO I = 1, NDFRKL
-        TRIES = 0
-        RS = 0
-        TOO_CLOSE = .TRUE.
-        DO WHILE((TRIES .LT. 100) .AND. (TOO_CLOSE .EQV. .TRUE.))
-          CALL RANDOM_NUMBER(RND)
-          XVAC(I) = INT(RND(1)*RBOX/0.5D0)*0.5D0
-          !CORNER ATOM POSITIONS WHERE COORDINATES CAN BE INTEGERS ONLY
-          IF (XVAC(I) - INT(XVAC(I)) .LT. 1D-2) THEN
-            YVAC(I) = INT(RND(2)*RBOX)
-            ZVAC(I) = INT(RND(3)*RBOX)
-          !CENTER ATOM POSITIONS (I.5, J.5, K.5) WHERE I J OR K CAN BE ANY INTEGER
-          ELSE IF (XVAC(I) - INT(XVAC(I)) .GE. 0.5D0) THEN
-            YVAC(I) = INT(RND(2)*RBOX) + 0.5D0
-            ZVAC(I) = INT(RND(3)*RBOX) + 0.5D0
-          ENDIF
+      IF (RANK .EQ. 0) THEN
 
-          TOO_CLOSE = .FALSE.
-          !!CHECKING IF SELECTED VACANCY LOCATION IS TOO CLOSE TO CURRENT INTERSITITALS
+        WRITE(*,'(A,I0,A)') 'Starting frenkel generation of '
+     #    ,NFRKL,' pairs'
+
+      END IF
+
+      !!PICK NFRKL ATOMS TO MOVE (SHOULD CREATE NFKRL # OF FRENKEL PAIRS)
+
+      DO I = 1, NATOMC
+
+        FLAG = .TRUE.
+
+        CALL RANDOM_NUMBER(RND)
+
+        ID = CEILING(RND*NATOMC)
+
+        IF (ID .EQ. 0) ID = 1
+
+        IF (NDINT .NE. 0 .AND. NDVAC .NE. 0) THEN
+
           DO J = 1, NDINT
-            RX = XVAC(I) - RA(1,II(1,J))
-            RY = YVAC(I) - RA(2,II(1,J))
-            RZ = ZVAC(I) - RA(3,II(1,J))
-            RS = RX**2 + RY**2 + RZ**2
-            IF (RS .LT. 2.0**2) THEN
-              TOO_CLOSE = .TRUE.
-            ENDIF
-          ENDDO
-          !!CHECKING IF SELECTED VACANCY LOCATION IS TOO CLOSE TO CURRENT VACANCIES
-          DO J = 1, NDVAC
-            RX = XVAC(I) - RR(1,IV(1,J))
-            RY = YVAC(I) - RR(2,IV(1,J))
-            RZ = ZVAC(I) - RR(3,IV(1,J))
-            RS = RX**2 + RY**2 + RZ**2
-            IF (RS .LT. 2.0**2) THEN
-              TOO_CLOSE = .TRUE.
-            ENDIF
-          ENDDO
-          !!CHECKING IF SELECTED VACANCY IS TOO CLOSE TO PREVIOUS NEW VACANCIES
-          IF (I .NE. 1) THEN
-            DO J = 1, I-1
-              RX = XVAC(I) - XVAC(J)
-              RY = YVAC(I) - YVAC(J)
-              RZ = ZVAC(I) - ZVAC(J)
-              RS = RX**2 + RY**2 + RZ**2
-              IF (RS .LT. 2.0**2) THEN
-                TOO_CLOSE = .TRUE.
-              ENDIF
-            ENDDO
-          ENDIF
-          TRIES = TRIES + 1
-        ENDDO
-        IF (TRIES .LT. 100) THEN
-          ADD_VACS = ADD_VACS + 1
-        ENDIF
-      ENDDO
 
-      !WRITE(*,'(A11,I5)') '# OF VACS= ',ADD_VACS
-      !WRITE(*,'(A7,I8)') 'TRIES= ',TRIES
+            IF (ID .EQ. II(1,J)) FLAG = .FALSE.
 
-      !!SHOULD HAVE BY NOW LOCATION OF NEW VANCANIES
-      !!DETERMINE THE INDEX IN RA ARRRAY
-      !!THE INDEXES FOUND WILL SERVE AS THE INDEXES OF ATOMS TO MOVE
-      !!TO CREATE NEW INTERSITITALS
+          END DO
 
-      !!ICLOSE :: INDEX OF THE CLOSEST ATOM
+        END IF
 
-      DO I = 1, ADD_VACS
-        ICLOSE = 1
-        DO J = 1, NATOMC
-          RX = XVAC(I) - RA(1,J)
-          RY = YVAC(I) - RA(2,J)
-          RZ = ZVAC(I) - RA(3,J)
-          RS = RX**2 + RY**2 + RZ**2
+        IF (FLAG) THEN
+        
+          IF (N .LT. NFRKL) THEN
+          
+            N = N + 1
 
-          RX = XVAC(I) - RA(1,ICLOSE)
-          RY = YVAC(I) - RA(2,ICLOSE)
-          RZ = ZVAC(I) - RA(3,ICLOSE)
-          RS_LOWEST = RX**2 + RY**2 + RZ**2
-          IF (RS .LT. RS_LOWEST) THEN
-            ICLOSE = J
-          ENDIF
-        ENDDO
-        MOVEI(I) = ICLOSE
-      ENDDO
+            MOVEID(N) = ID
 
-      !!CREATING INTERSTITIALS ANYWHERE IN THE SYSTEM EXCLUDING CLOSE TO EDGES
-      DO I = 1, ADD_VACS  !USING ADD_VACS INSTEAD OF NDFRKL TO AVOID EXTRA WORK
-        TRIES = 0
-        RS = 0
-        TOO_CLOSE = .TRUE.
-        DO WHILE((TRIES .LT. 100) .AND. (TOO_CLOSE .EQV. .TRUE.))
-          CALL RANDOM_NUMBER(RND)
-          XINT(I) = RND(1)*(RBOX-4) + 2
-          YINT(I) = RND(2)*(RBOX-4) + 2
-          ZINT(I) = RND(3)*(RBOX-4) + 2
+          END IF
 
-          TOO_CLOSE = .FALSE.
-          !!CHECKING IF SELECTED INT LOCATION IS TOO CLOSE TO CURRENT INTERSITITALS
-          DO J = 1, NDINT
-            RX = XINT(I) - RA(1,II(1,J))
-            RY = YINT(I) - RA(2,II(1,J))
-            RZ = ZINT(I) - RA(3,II(1,J))
-            RS = RX**2 + RY**2 + RZ**2
-            IF (RS .LT. 2.0**2) THEN
-              TOO_CLOSE = .TRUE.
-            ENDIF
-          ENDDO
-          !!CHECKING IF SELECTED INT LOCATION IS TOO CLOSE TO CURRENT VACANCIES
-          DO J = 1, NDVAC
-            RX = XINT(I) - RR(1,IV(1,J))
-            RY = YINT(I) - RR(2,IV(1,J))
-            RZ = ZINT(I) - RR(3,IV(1,J))
-            RS = RX**2 + RY**2 + RZ**2
-            IF (RS .LT. 2.0**2) THEN
-              TOO_CLOSE = .TRUE.
-            ENDIF
-          ENDDO
-          !!CHECKING IF SELECTED INT LOCATION IS TOO CLOSE TO NEW VACANCIES
-          DO J = 1, ADD_VACS
-            RX = XINT(I) - XVAC(J)
-            RY = YINT(I) - YVAC(J)
-            RZ = ZINT(I) - ZVAC(J)
-            RS = RX**2 + RY**2 + RZ**2
-            IF (RS .LT. 2.0**2) THEN
-              TOO_CLOSE = .TRUE.
-            ENDIF
-          ENDDO
-          !!CHECKING IF SELECTED INT LOCATION IS TOO CLOSE TO PREVIOUS NEW INTS
-          IF (I .NE. 1) THEN
-            DO J = 1, I-1
-              RX = XINT(I) - XINT(J)
-              RY = YINT(I) - YINT(J)
-              RZ = ZINT(I) - ZINT(J)
-              RS = RX**2 + RY**2 + RZ**2
-              IF (RS .LT. 2.0**2) THEN
-                TOO_CLOSE = .TRUE.
-              ENDIF
-            ENDDO
-          ENDIF
-          TRIES = TRIES + 1
-        ENDDO
-        IF (TRIES .LT. 100) THEN
-          ADD_INTS = ADD_INTS + 1
-        ENDIF
-      ENDDO
+        END IF
 
-      !!NOW I SHOULD HAVE LOCATIONS FOR NEW INTS AND VACS
-      !!NOW ALTER INT POSITIONS FOR BETTER RELAXATION
+      END DO
 
-      IF (ADD_INTS .NE. 0) THEN
+      !!MOVE CHOSEN ATOMS TO RANDOM LOCATIONS
 
-        !!MOVE THE CLOSEST ATOM TO THE INT AND THE INT A SLIGHT BIT FOR BETTER RELAX
-        DO I = 1, ADD_INTS
-          ICLOSE = 1
-          DO J = 1, NATOMC
-            RX = XINT(I) - RA(1,J)
-            RY = YINT(I) - RA(2,J)
-            RZ = ZINT(I) - RA(3,J)
-            RS = RX**2 + RY**2 + RZ**2
+      DO I = 1, N
 
-            RX = XINT(I) - RA(1,ICLOSE)
-            RY = YINT(I) - RA(2,ICLOSE)
-            RZ = ZINT(I) - RA(3,ICLOSE)
-            RS_LOWEST = RX**2 + RY**2 + RZ**2
-            IF (RS .LT. RS_LOWEST) THEN
-              ICLOSE = J
-            ENDIF
-          ENDDO
+        FLAG = .TRUE.
 
-          !!CALCULATE THE UNIT VECTOR FOR MOVE STEP
-          RX = RA(1,ICLOSE) - XINT(I)
-          RY = RA(2,ICLOSE) - YINT(I)
-          RZ = RA(3,ICLOSE) - ZINT(I)
-          RS_LOWEST = RX**2 + RY**2 + RZ**2
-          RX = RX / SQRT(RS_LOWEST)
-          RY = RY / SQRT(RS_LOWEST)
-          RZ = RZ / SQRT(RS_LOWEST)
+        CALL RANDOM_POSITION(MOVEID, N, 4.0D0, NEWPOS)
 
-          !!THIS ACTUALLY CREATES THE FRENKEL DEFECTS (#VACS CREATED = #INTS CREATED)
-          RA(1,MOVEI(I)) = RA(1,ICLOSE) - RX*0.25
-          RA(2,MOVEI(I)) = RA(2,ICLOSE) - RY*0.25
-          RA(3,MOVEI(I)) = RA(3,ICLOSE) - RZ*0.25
+        DO WHILE (FLAG)
 
-          !!MOVE BOTH THE CLOSEST ATOM AND THE INT
-          RA(1,ICLOSE) = RA(1,ICLOSE) + RX*0.25
-          RA(2,ICLOSE) = RA(2,ICLOSE) + RY*0.25
-          RA(3,ICLOSE) = RA(3,ICLOSE) + RZ*0.25
+          CALL FRENKEL_POS_UPDATE(NEWPOS,DLIM,FLAG)
 
-        ENDDO
+        END DO
 
-      ENDIF
-      !!VACANCIES SHOULD BE CREATED AND THE SAME AMOUNT OF SLIGHTLY MORE STABLE
-      !!INTS WERE ALSO CREATED. 
-      !THIS SUB GUARANTEED TO CREATE ADD_INTS AMOUNT OF FRENKEL PAIRS
-      WRITE(*,'(I4,X,A33)')ADD_INTS, "FRENKEL PAIR DEFECTS WERE CREATED"
+        RA(:,MOVEID(I)) = NEWPOS
 
-      END SUBROUTINE
+      END DO
 
+      END SUBROUTINE ELECTRON_DAMAGE
 !***********************************************************************!
-      SUBROUTINE CALC_DPA
+      SUBROUTINE RANDOM_POSITION(IDS, N, THRESH, POS)
 
-      USE SYSTEM, ONLY: NATOMC, DPA, AVDPA, DPAC, DTIME, DRATE
-      USE DEFECT, ONLY: NDTOT, ONDTOT
+      USE SYSTEM, ONLY: RA, NATOMC, RBOX
 
       IMPLICIT NONE
 
-      INTEGER :: NEWDEF
+      INTEGER,INTENT(IN) :: IDS(N)
+      INTEGER,INTENT(IN) :: N
+      INTEGER :: I
+      REAL *8, INTENT(IN) :: THRESH
+      REAL *8, INTENT(OUT) :: POS(3)
+      REAL *8 :: RX, RY, RZ, RS
+      LOGICAL :: FLAG
+
+      FLAG = .TRUE.
+
+      DO WHILE (FLAG)
+
+        FLAG = .FALSE.
+
+        CALL RANDOM_NUMBER(POS)
+
+        POS = POS * RBOX
+
+        DO I = 1, N
+
+          RX = POS(1) - RA(1,IDS(I))
+
+          RY = POS(2) - RA(2,IDS(I))
+
+          RZ = POS(3) - RA(3,IDS(I))
+
+          RS = RX*RX + RY*RY + RZ*RZ
+
+          IF (RS .LT. THRESH) FLAG = .TRUE.
+
+        END DO
+
+      END DO
+
+      END SUBROUTINE RANDOM_POSITION
+!***********************************************************************!
+      SUBROUTINE FRENKEL_POS_UPDATE(POS,THRESH,FLAG)
+
+      USE SYSTEM, ONLY: RA, NATOMC
+
+      IMPLICIT NONE
+
+      INTEGER :: I, ID_NEAR
+      REAL *8, INTENT(INOUT) :: POS(3)
+      REAL *8, INTENT(IN) :: THRESH
+      REAL *8 :: RX, RY, RZ, RS, RS_NEAR
+      REAL *8 :: UNIT(3)
+      LOGICAL, INTENT(INOUT) :: FLAG
+
+!!FIND CLOSEST ATOM TO (X,Y,Z)
+
+      ID_NEAR = 0; RS_NEAR = HUGE(RS_NEAR)
+
+      IF (FLAG) THEN
+
+        FLAG = .FALSE.
+
+        DO I = 1, NATOMC
+
+          RX = RA(1,I) - POS(1)
+
+          RY = RA(2,I) - POS(2)
+
+          RZ = RA(3,I) - POS(3)
+
+          RS = RX*RX + RY*RY + RZ*RZ
+
+          IF (RS .LT. RS_NEAR) THEN
+
+            RS_NEAR = RS
+
+            ID_NEAR = I
+
+          END IF
+
+        END DO
+
+        IF (RS_NEAR .LT. THRESH) THEN
+
+          FLAG = .TRUE.
+
+          UNIT(1) = POS(1) - RA(1,ID_NEAR) 
+
+          UNIT(2) = POS(2) - RA(2,ID_NEAR) 
+
+          UNIT(3) = POS(3) - RA(3,ID_NEAR)
+
+          UNIT = UNIT/NORM2(UNIT)
+
+          POS = POS + SQRT(THRESH)/3*UNIT
+
+        END IF
+
+      END IF
+
+      END SUBROUTINE FRENKEL_POS_UPDATE
+!***********************************************************************!
+      SUBROUTINE MD_DPA
+
+      USE SYSTEM, ONLY: NATOMC, DPA, AVDPA, DPAC, DTIME, DRATE, TDAM,
+     #  CALC
+      USE DEFECT, ONLY: ONDSTOT, NDSTOT
+
+      IMPLICIT NONE
+
+      REAL *8 :: NEWDSP
 
       !UPDATE AVERAGE DPA VALUE
 
-      NEWDEF = NDTOT - ONDTOT
+      NEWDSP = NDSTOT - ONDSTOT
 
-      AVDPA = (AVDPA*DPAC + REAL(NEWDEF)/REAL(NATOMC)) / (DPAC + 1)
+      AVDPA = (AVDPA*DPAC + NEWDSP/NATOMC) / (DPAC + 1)
 
       DPAC = DPAC + 1
-
-      !ADD AVERAGE DPA PER CASCADE TO CURRENT DPA VALUE
-
-      DPA = DPA + AVDPA
 
       !UPDATE TIME BETWEEN CASCADES
 
       DTIME = AVDPA / DRATE
 
-      END SUBROUTINE CALC_DPA
+      !ADD AVERAGE DPA PER CASCADE TO CURRENT DPA VALUE
+
+      DPA = DPA + NEWDSP/NATOMC
+
+      CALC = .FALSE.
+
+      END SUBROUTINE MD_DPA
 !***********************************************************************!
       !!CREATES RESTART FILES AT FIXED INTERVALS. THESE RESTART FILES
       !!INCLUDE THE SYSTEM CONFIGURATION INCASE ONE WANT TO RESTART THE 
