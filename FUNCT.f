@@ -314,8 +314,8 @@ C      ENDDO
 
       IF (RANK .EQ. 0) THEN
 
-        WRITE(*,'(A,I0,A)') 'Starting frenkel generation of '
-     #    ,NFRKL,' pairs'
+        WRITE(*,'(A,I0,A)') 'Generating '
+     #    ,NFRKL,' Frenkel pairs'
 
       END IF
 
