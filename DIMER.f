@@ -703,6 +703,13 @@
       TYPE(DIMER),INTENT(INOUT) :: THIS
 
       !REMOVE THE SYSTEM FROM THE DIMER LAMMPS INSTANCE
+
+      CALL LAMMPS_COMMAND(lmpDimer, 'uncompute pesum')
+
+      CALL LAMMPS_COMMAND(lmpDimer, 'uncompute peratom')
+
+      CALL LAMMPS_COMMAND(lmpDimer, 'group saddle delete')
+
       CALL LAMMPS_COMMAND(lmpDimer, 'delete_atoms group all')
 
 !$OMP CRITICAL
