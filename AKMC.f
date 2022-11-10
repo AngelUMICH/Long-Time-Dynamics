@@ -909,7 +909,7 @@
 
         NTEMP = NTEMP + 1
 
-        PTEMP(4,I) = 4.2 + 0.866*abs(PTEMP(6,I))**(1.0/3.0)
+        PTEMP(4,I) = 4.2 + 0.866*abs(PTEMP(6,I))**(1/3)
 
         PTEMP(:,NTEMP) = PX(:,I)
 
