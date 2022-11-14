@@ -312,18 +312,11 @@ C      ENDDO
 
       CALL RANDOM_SEED()
 
-      IF (RANK .EQ. 0) THEN
-
-        WRITE(*,'(A,I0,A)') 'Generating '
-     #    ,NFRKL,' Frenkel pairs'
-
-      END IF
+      WRITE(*,'(A,I0,A)') 'Generating ',NFRKL,' Frenkel pairs'
 
       !!PICK NFRKL ATOMS TO MOVE (SHOULD CREATE NFKRL # OF FRENKEL PAIRS)
 
-      DO I = 1, NATOMC
-
-        FLAG = .TRUE.
+      DO I = 1, NFRKL
 
         CALL RANDOM_NUMBER(RND)
 
@@ -331,43 +324,15 @@ C      ENDDO
 
         IF (ID .EQ. 0) ID = 1
 
-        IF (NDINT .NE. 0 .AND. NDVAC .NE. 0) THEN
-
-          DO J = 1, NDINT
-
-            IF (ID .EQ. II(1,J)) FLAG = .FALSE.
-
-          END DO
-
-        END IF
-
-        IF (FLAG) THEN
-        
-          IF (N .LT. NFRKL) THEN
-          
-            N = N + 1
-
-            MOVEID(N) = ID
-
-          END IF
-
-        END IF
+        MOVEID(I) = ID
 
       END DO
 
       !!MOVE CHOSEN ATOMS TO RANDOM LOCATIONS
 
-      DO I = 1, N
+      DO I = 1, NFRKL
 
-        FLAG = .TRUE.
-
-        CALL RANDOM_POSITION(MOVEID, N, 4.0D0, NEWPOS)
-
-        DO WHILE (FLAG)
-
-          CALL FRENKEL_POS_UPDATE(NEWPOS,DLIM,FLAG)
-
-        END DO
+        CALL FRENKEL_POS_UPDATE(NEWPOS,DLIM)
 
         RA(:,MOVEID(I)) = NEWPOS
 
@@ -375,51 +340,9 @@ C      ENDDO
 
       END SUBROUTINE ELECTRON_DAMAGE
 !***********************************************************************!
-      SUBROUTINE RANDOM_POSITION(IDS, N, THRESH, POS)
+      SUBROUTINE FRENKEL_POS_UPDATE(POS,THRESH)
 
       USE SYSTEM, ONLY: RA, NATOMC, RBOX
-
-      IMPLICIT NONE
-
-      INTEGER,INTENT(IN) :: IDS(N)
-      INTEGER,INTENT(IN) :: N
-      INTEGER :: I
-      REAL *8, INTENT(IN) :: THRESH
-      REAL *8, INTENT(OUT) :: POS(3)
-      REAL *8 :: RX, RY, RZ, RS
-      LOGICAL :: FLAG
-
-      FLAG = .TRUE.
-
-      DO WHILE (FLAG)
-
-        FLAG = .FALSE.
-
-        CALL RANDOM_NUMBER(POS)
-
-        POS = POS * RBOX
-
-        DO I = 1, N
-
-          RX = POS(1) - RA(1,IDS(I))
-
-          RY = POS(2) - RA(2,IDS(I))
-
-          RZ = POS(3) - RA(3,IDS(I))
-
-          RS = RX*RX + RY*RY + RZ*RZ
-
-          IF (RS .LT. THRESH) FLAG = .TRUE.
-
-        END DO
-
-      END DO
-
-      END SUBROUTINE RANDOM_POSITION
-!***********************************************************************!
-      SUBROUTINE FRENKEL_POS_UPDATE(POS,THRESH,FLAG)
-
-      USE SYSTEM, ONLY: RA, NATOMC
 
       IMPLICIT NONE
 
@@ -428,53 +351,63 @@ C      ENDDO
       REAL *8, INTENT(IN) :: THRESH
       REAL *8 :: RX, RY, RZ, RS, RS_NEAR
       REAL *8 :: UNIT(3)
-      LOGICAL, INTENT(INOUT) :: FLAG
+      LOGICAL :: FLAG
 
-!!FIND CLOSEST ATOM TO (X,Y,Z)
+      ID_NEAR = 0; RS_NEAR = HUGE(RS_NEAR); FLAG = .TRUE.
 
-      ID_NEAR = 0; RS_NEAR = HUGE(RS_NEAR)
+      CALL RANDOM_NUMBER(POS)
 
-      IF (FLAG) THEN
+      POS = POS * RBOX
 
-        FLAG = .FALSE.
+      !!FIND CLOSEST ATOM TO (X,Y,Z)
 
-        DO I = 1, NATOMC
+      DO I = 1, NATOMC
 
-          RX = RA(1,I) - POS(1)
+        RX = RA(1,I) - POS(1)
 
-          RY = RA(2,I) - POS(2)
+        RY = RA(2,I) - POS(2)
 
-          RZ = RA(3,I) - POS(3)
+        RZ = RA(3,I) - POS(3)
 
-          RS = RX*RX + RY*RY + RZ*RZ
+        RS = RX*RX + RY*RY + RZ*RZ
 
-          IF (RS .LT. RS_NEAR) THEN
+        IF (RS .LT. RS_NEAR) THEN
 
-            RS_NEAR = RS
+          RS_NEAR = RS
 
-            ID_NEAR = I
-
-          END IF
-
-        END DO
-
-        IF (RS_NEAR .LT. THRESH) THEN
-
-          FLAG = .TRUE.
-
-          UNIT(1) = POS(1) - RA(1,ID_NEAR) 
-
-          UNIT(2) = POS(2) - RA(2,ID_NEAR) 
-
-          UNIT(3) = POS(3) - RA(3,ID_NEAR)
-
-          UNIT = UNIT/NORM2(UNIT)
-
-          POS = POS + SQRT(THRESH)/3*UNIT
+          ID_NEAR = I
 
         END IF
 
-      END IF
+      END DO
+
+      !!! UPDATE THE POSITION UNTIL IT IS SUITABLE FOR RELAXATION
+
+      DO WHILE (FLAG)
+
+        FLAG = .FALSE.
+
+        UNIT(1) = POS(1) - RA(1,ID_NEAR) 
+
+        UNIT(2) = POS(2) - RA(2,ID_NEAR) 
+
+        UNIT(3) = POS(3) - RA(3,ID_NEAR)
+
+        UNIT = UNIT/NORM2(UNIT)
+
+        POS = POS + SQRT(THRESH)/3*UNIT
+
+        RX = POS(1) - RA(1,ID_NEAR)
+
+        RY = POS(2) - RA(2,ID_NEAR)
+
+        RZ = POS(3) - RA(3,ID_NEAR)
+
+        RS = RX*RX + RY*RY + RZ*RZ
+
+        IF (RS .LT. THRESH) FLAG = .TRUE.
+
+      END DO
 
       END SUBROUTINE FRENKEL_POS_UPDATE
 !***********************************************************************!
