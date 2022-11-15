@@ -172,68 +172,37 @@
       USE DEFECT
       USE KMCVAR
 
-      INTEGER I,J
-
       REAL*8 RX,RY,RZ,RS,TX,TY,TZ,TS,PBC
-
-      SR = 0.0D0 !HAVE TO RESET ARRAY BECAUSE OF MPI_SUM BETWEEN RANK0 AND EVERY OTHER RANK
-
-      EM = 0.0D0
-
-      ND = 0.0D0
-
-!COMPARE THE CURRENT DEFECTS WITH PREVIOUS DEFECTS
-
-      DO I=1,NDTOT
-
-        DO J=1,ONDTOT
 
 !IF THE DEFECT INDEX IS THE SAME
 
-          IF(PX(7,I).EQ.OX(7,J)) THEN
+      IF(PX(7,1).EQ.OX(7)) THEN
 
-            RX = PBC(PX(1,I)-OX(1,J))
-            RY = PBC(PX(2,I)-OX(2,J))
-            RZ = PBC(PX(3,I)-OX(3,J))
+        RX = PBC(PX(1,1)-OX(1))
+        RY = PBC(PX(2,1)-OX(2))
+        RZ = PBC(PX(3,1)-OX(3))
 
-            RS = RX*RX + RY*RY+RZ*RZ
+        RS = RX*RX + RY*RY+RZ*RZ
 
 !IF THE DEFECT POSITION IS THE SAME
 
-            IF(RS.LT.1.0D-8) THEN
-
-              TX = PBC(PX(1,I)-OX(1,JID))
-              TY = PBC(PX(2,I)-OX(2,JID))
-              TZ = PBC(PX(3,I)-OX(3,JID))
-
-              TS = TX*TX+TY*TY+TZ*TZ
-
-!IF THE DEFECT IS FAR FROM THE AV CHOSEN BY KMC
-
-              IF(TS.GT.(PX(4,I)+OX(4,JID))**2) THEN
+        IF(RS.LT.1.0D-8) THEN
 
 !THE INFORMATION CAN BE RECYCLYED
 
-              WRITE(*,'(A,I12,4F14.5,I12,4F14.5)') 'RSP',
-     #        I,PX(1:4,I),JID,OX(1:4,JID)
+          WRITE(*,'(A,I12,8F14.5)') 'RSP', 1, PX(1:4,1), OX(1:4)
 
-              EM(:,I) = OE(:,J)
+          SR = OR
 
-              ND(:,I) = ON(:,J)
+          EM = OE
 
-              SR(:,:,:,I) = OR(:,:,:,J)
+          ND = ON
 
-              PX(5,I) = 0.0D0
+          PX(5,1) = 0.0D0
 
-              ENDIF
+        ENDIF
 
-            ENDIF
-
-          ENDIF
-
-        ENDDO
-
-      ENDDO
+      ENDIF
 
       RETURN
 
@@ -255,18 +224,23 @@
 
       TYPE(DIMER) :: ADIMER
 
-      INTEGER I,J,K
+      INTEGER :: I,J,K
 
-      INTEGER RA_LEN, SR_LEN, EM_LEN, ND_LEN !USED FOR OPENMPI
+      INTEGER :: RA_LEN, SR_LEN
+
+!CLEAR ALL DATA
+
+      SR = 0.0D0
+
+      EM = 0.0D0
+
+      ND = 0.0D0
 
 !MPI VARIABLES
-      RA_LEN = 3*(NATOMC+NDEMAX)
 
-      SR_LEN = 4*NAVMAX*NDIMER*NDEMAX
+      RA_LEN = SIZE(RA)
 
-      EM_LEN = NDIMER*NDEMAX
-
-      ND_LEN = NDIMER*NDEMAX
+      SR_LEN = SIZE(SR)
 
 !BEFORE WE SEARCH WE NEED TO UPDATE SOME IMPORTANT INFO IN ALL PROCESSES
 
@@ -276,61 +250,53 @@
 
       CALL MPI_BCAST(PX, 7*NDEMAX, MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
 
-      CALL MPI_BCAST(NDTOT, 1, MPI_INT, 0, MPI_COMM_WORLD, IERR)
-
-!DO LOOP OVER ALL THE CURRENT DEFECT
-
-      DO I=1, NDTOT
-
 !IF THE AV REQUIRES SADDLE POINT SEARCHING
 
-        IF((PX(5,I).NE.0.0D0).AND.(PX(6,I).NE.0.0D0)) THEN
+      IF((PX(5,1).NE.0.0D0).AND.(PX(6,1).NE.0.0D0)) THEN
 
 !CARRY OUT SADDLE POINT SEARCHING
 
-            DO J=LDIMERI,UDIMERI
+        DO J=LDIMERI,UDIMERI
 
-            CALL DIMER_INIT(ADIMER,PX(1,I),PX(2,I),PX(3,I),PX(4,I))
+          CALL DIMER_INIT(ADIMER,PX(1,1),PX(2,1),PX(3,1),PX(4,1))
 
-            CALL DIMER_SEARCH(ADIMER)
+          CALL DIMER_SEARCH(ADIMER)
 
 !STORE INFORMATION,EM:MIGRATION ENERGY BARRIER
 !ND:TOTAL NUMBER OF ATOMS IN THE AV
 
-            EM(J,I) = ADIMER%EMDIFF
+          EM(J) = ADIMER%EMDIFF
 
-            ND(J,I) = ADIMER%NATOM1
+          ND(J) = ADIMER%NATOM1
 
 !STORE THE SADDLE POINT CONFIGURATION,SR:POSITION OF SADDLE POINT
 
-            DO K=1,ND(J,I)
+          DO K=1,ND(J)
 
-              SR(1,K,J,I) = ADIMER%SX(1,K)
-              SR(2,K,J,I) = ADIMER%SX(2,K)
-              SR(3,K,J,I) = ADIMER%SX(3,K)
-              SR(4,K,J,I) = ADIMER%SI(1,K)
-
-            ENDDO
-
-            WRITE(*,'(A,2I12,F14.5)') 'SPS',I,J,EM(J,I)
-
-            CALL DIMER_FINISH(ADIMER)
+            SR(1,K,J) = ADIMER%SX(1,K)
+            SR(2,K,J) = ADIMER%SX(2,K)
+            SR(3,K,J) = ADIMER%SX(3,K)
+            SR(4,K,J) = ADIMER%SI(1,K)
 
           ENDDO
 
-        ENDIF
+          WRITE(*,'(A,1I12,F14.5)') 'SPS',J,EM(J)
 
-      ENDDO
+          CALL DIMER_FINISH(ADIMER)
 
-!NOW ALL SR, EM, AND ND WILL GATHER TO RANK 0 SO IT CAN DO KMC
+        ENDDO
+
+      ENDIF
+
+!GATHER RESULTS ON MAIN RANK
 
       CALL MPI_REDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, 0,
      &                MPI_COMM_WORLD, IERR)
 
-      CALL MPI_REDUCE(EM, EMBUFF, EM_LEN, MPI_REAL8, MPI_SUM, 0,
+      CALL MPI_REDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, 0,
      &                MPI_COMM_WORLD, IERR)
 
-      CALL MPI_REDUCE(ND, NDBUFF, ND_LEN, MPI_INT, MPI_SUM, 0,
+      CALL MPI_REDUCE(ND, NDBUFF, NDIMER, MPI_INT, MPI_SUM, 0,
      &                MPI_COMM_WORLD, IERR)
 
       !SO THAT CODE CAN CONTINUE AS NORMAL
@@ -347,13 +313,13 @@
 
 !STORE INFROMATION FOR SADDLE POINT RECYCLYING
 
+      OR = SR
+
       OE = EM
 
       ON = ND
 
-      OR = SR
-
-      OX = PX
+      OX = PX(:,1)
 
       RETURN
       END SUBROUTINE
@@ -381,17 +347,17 @@
             
         !THE TOTAL NUMBER OF THE ATOMS INSIDE THE CHOSEN AV
 
-        NSTMP = ND(EID,JID)
+        NSTMP = ND(EID)
 
         !PASSING THE POSITIONS OF ATOMS INSIDE AV TO THE SYSTEM
 
         DO I=1,NSTMP
   
-          J=INT(SR(4,I,EID,JID))
+          J=INT(SR(4,I,EID))
     
-          RA(1,J) = SR(1,I,EID,JID)
-          RA(2,J) = SR(2,I,EID,JID)
-          RA(3,J) = SR(3,I,EID,JID)
+          RA(1,J) = SR(1,I,EID)
+          RA(2,J) = SR(2,I,EID)
+          RA(3,J) = SR(3,I,EID)
   
         ENDDO
 
@@ -412,12 +378,12 @@
         WRITE(*,'(3X, 2A12, 2A14, 2A14)') 'STEP','DIMER ID','BARRIER',
      #    'SYS ENERGY', 'TIME', 'DPA'
 
-        WRITE(*,'(A,2I12,2F14.5,2E14.5)') 'ITR',ISTEP,EID,EM(EID,JID),
+        WRITE(*,'(A,2I12,2F14.5,2E14.5)') 'ITR',ISTEP,EID,EM(EID),
      #    ENCALC,TIME,DPA
 
         !THIS IS FOR WRITING SADDLE AND FINAL ENERGY AFTER INITIAL ENERGY
      
-        WRITE(25, '(2F14.5)') EM(EID, JID), ENCALC
+        WRITE(25, '(2F14.5)') EM(EID), ENCALC
 
         !OUTPUT DEFECTS FOR OVITO
 
@@ -1075,94 +1041,79 @@
 
 !FQSUM:SUM OF FREQUENCY,POSUM:SUM OF PROBABILITIES(FOR CHECK ONLY)
 
-      FQSUM = 0.0D0
-      POSUM = 0.0D0
-      jmapsz = 1000
-
-!DO LOOP OVER ALL THE DEFECTS AND NUMBER OF SPS
-
-      DO J=1,NDTOT
-        DO K=1,NDIMER
+        FQSUM = 0.0D0
+        POSUM = 0.0D0
+        jmapsz = 1000
 
 !CALCULATE FREQUENCY BASED ON THE MIGRATION ENERGY BARRIER
 !THE PREFACTOR HERE IS USED TO BE CONSTANT (NOT TRUE IN GENERAL)
 !THE PREFACTOR CALCUATED ON THE FLY IS IMPLEMENTED IN ANOTHER VERSION
 ! Now considering good dimer search - Gao 2021
-           if(em(k,j).lt.10) then
-            FQ(K,J) = 1.0D12*EXP(-EM(K,J)/KB/TEMP)
-            FQSUM = FQSUM + FQ(K,J)
-           endif
-        ENDDO
-      ENDDO
 
-      CALL RANDOM_NUMBER(RND)
-      prop = rnd*float(jmapsz)
-
-!DETERMINE TIME STEP IN KMC
-
-      if(FQSUM.gt.0.0) then
-      TMEAN = -LOG10(RND)/FQSUM
-
-      dt = 1.0/fqsum
-      scalef = dt*dfloat(jmapsz)
-      endif
-
-      DO J=1,NDTOT
         DO K=1,NDIMER
-         if(em(k,j).lt.10.0) then
-          POSUM = POSUM + FQ(K,J)*scalef
-         endif
-         if(posum.ge.prop) goto 200
+            if(EM(k).lt.10) then
+            FQ(K) = 1.0D12*EXP(-EM(K)/KB/TEMP)
+            FQSUM = FQSUM + FQ(K)
+            endif
         ENDDO
-      ENDDO
 
- 200  continue
-!JID:THE ID OF THE DEFECT THAT IS CHOSEN
+        CALL RANDOM_NUMBER(RND)
+        prop = rnd*float(jmapsz)
 
-      JID = J
+        !DETERMINE TIME STEP IN KMC
 
-!EID:THE ID OF THE EVENT THAT IS CHOSEN
+        if(FQSUM.gt.0.0) then
+        TMEAN = -LOG10(RND)/FQSUM
 
-      EID = K
+        dt = 1.0/fqsum
+        scalef = dt*dfloat(jmapsz)
+        endif
 
-!UPDATING THE PRE-SELECTION ENERGIES
+        DO K=1,NDIMER
+          if(EM(k).lt.10.0) then
+          POSUM = POSUM + FQ(K)*scalef
+          endif
+          if(POSUM.ge.prop) exit
+        ENDDO
 
-      IF(PX(6,1).LT.0) THEN
-      K=1
-      ELSE
-      K=2
-      ENDIF
+        !EID:THE ID OF THE EVENT THAT IS CHOSEN
 
-      I = ABS(INT(PX(6,1)))
+        EID = K
 
-      EMIG(K,I) = (EMIG(K,I)*EMIC(K,I) + EM(EID,JID)) / (EMIC(K,I)+1)
+        !UPDATING THE PRE-SELECTION ENERGIES
 
-      EMIC(K,I) = EMIC(K,I) + 1
+        IF(PX(6,1).LT.0) THEN
+          K=1
+        ELSE
+          K=2
+        ENDIF
 
-!CHECKING FOR TOO HIGH TRANSITION ENERGY
+        I = ABS(INT(PX(6,1)))
 
-      IF (EM(EID,JID) .LE. EMSKIP .AND. EID .LE. NDIMER) THEN
+        EMIG(K,I) = (EMIG(K,I)*EMIC(K,I) + EM(EID)) / (EMIC(K,I)+1)
 
-        TIME = TIME + TMEAN
+        EMIC(K,I) = EMIC(K,I) + 1
 
-      ELSE
+        !CHECKING FOR TOO HIGH TRANSITION ENERGY
 
-        SKIP = .TRUE.
+        IF (EM(EID) .LE. EMSKIP .AND. EID .LE. NDIMER) THEN
 
-        WRITE(STR,'(F8.5)') EMSKIP
+          TIME = TIME + TMEAN
 
-        WRITE(6,*) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)//
-     #              'eV -> SKIPPING'
+        ELSE
 
-      ENDIF
+          SKIP = .TRUE.
 
-!WRITING THE DIMER ENERGIES TO STD_KDIM.OUT
+          WRITE(STR,'(F8.5)') EMSKIP
 
-      WRITE(6,*) 'JID:',JID,'EID:',EID,'RND',RND
+          WRITE(6,*) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)//
+     #                'eV -> SKIPPING'
 
-      DO K = 1,NDIMER
-        WRITE(21, *) (EM(K,J), J = 1, NDTOT)
-      ENDDO
+        ENDIF
+
+        !WRITING THE DIMER ENERGIES TO STD_KDIM.OUT
+
+        WRITE(6,'(A,I10,A,F10.4)') 'EID: ',EID,'  RND: ',RND
 
       END IF
 
