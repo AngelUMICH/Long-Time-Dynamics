@@ -107,14 +107,14 @@ contains
 
   integer :: i,j
 
-  if (rank == 0) write(*,'(A)') 'Starting Relaxation'
+  if (rank == 0) write(*,'(A)') 'Relaxing System'
 
   !Minimize/relax the system
   call lammps_command(lmp, 'min_style cg')
   call lammps_command(lmp, 'minimize 1.0e-10 1.0e-10 100 1000')
 
   call LMP_ENERGY
-  if (rank == 0) write(*,'(A)') 'Ending Relaxation'
+  if (rank == 0) write(*,'(A)') 'Finished Relaxation'
 
   !When ONLY relaxing system
   if (TJOB.EQ.1) then
