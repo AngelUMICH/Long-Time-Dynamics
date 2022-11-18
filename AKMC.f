@@ -57,8 +57,6 @@
 
       IF (RANK .EQ. 0) THEN
 
-        CALL EXECUTE_COMMAND_LINE('mv mig*.log std_evo.out ./DUMP')
-
         WRITE(26,*) NATOMC
 
         DO I = 1, NATOMC
