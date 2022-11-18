@@ -365,7 +365,7 @@ contains
   integer:: i
   real*8, dimension(:) :: pos(3*NATOMC)
 
-  CALL MPI_BCAST(RA, 3*(NATOMC+NDEMAX), MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
+  CALL MPI_BCAST(RA, size(RA), MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
 
   DO I= 1,NATOMC
     pos(3*(i-1)+1: 3*(i-1)+3) = RA(:,i) * RLAT
