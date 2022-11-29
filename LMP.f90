@@ -92,6 +92,7 @@ contains
     call lammps_command(lmpDimer, 'pair_style eam/fs')
     call lammps_command(lmpDimer, 'pair_coeff * * FeP_mm.eam.fs Fe')
     call lammps_command(lmpDimer, 'neighbor 0 bin')
+    call lammps_command(lmpDimer, 'neigh_modify every 2 delay 10 check yes')
 
     call lammps_command(lmpDimer, 'timestep 0.001')
     call lammps_command(lmpDimer, 'thermo 200')
