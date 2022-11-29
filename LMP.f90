@@ -59,11 +59,6 @@ contains
     !Extracting MD values
     call lammps_extract_compute (lmpTemp, lmp, 'thermo_temp', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
     call lammps_extract_compute (lmpEnergy, lmp, 'thermo_pe', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
-
-    call RECV_LMP_POS
-
-    !Initializing the Dimer LAMMPS instances
-    call LMP_DIMER_INIT
   
   end subroutine LMP_INIT
 !***********************************************************************!
