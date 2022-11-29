@@ -37,8 +37,6 @@
 
           CALL CBC
 
-          CALL RSP
-
         END IF    
 
         CALL SPS
@@ -308,17 +306,7 @@
         ND = NDBUFF
 
       ENDIF
-
-!STORE INFROMATION FOR SADDLE POINT RECYCLYING
-
-      OR = SR
-
-      OE = EM
-
-      ON = ND
-
-      OX = PX(:,1)
-
+      
       RETURN
       END SUBROUTINE
 !***********************************************************************!
