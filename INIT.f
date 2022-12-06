@@ -61,12 +61,12 @@
       CALL RECV_LMP_POS
 
 !!READING REFERENCE STRUCTURE
-
-      READ(16,*) NATOMR
+            
+      NATOMR = 2*RBOX**3
 
       ALLOCATE(RR(3,NATOMR))
 
-      READ(16,*)(RR(1,I),RR(2,I),RR(3,I),I=1,NATOMR)
+      CALL CREATE_REF_LATTICE
 
 !!READING POTENTIAL FILES
 
@@ -425,6 +425,36 @@
       RETURN
 
       END SUBROUTINE SYS_INIT
+!***********************************************************************!
+!BCC REFERENCE LATTICE CREATION ONLY
+      SUBROUTINE CREATE_REF_LATTICE
+
+      USE SYSTEM, ONLY: RR, RBOX, NATOMR,RANK
+
+      IMPLICIT NONE
+
+      INTEGER :: I,J,K,COUNT
+      REAL*8  :: X1,Y1,Z1,X2,Y2,Z2
+
+      X1 = 0; Y1=0; Z1=0
+      X2 = 0.5; Y2=0.5; Z2=0.5
+      COUNT=1
+
+      DO I = 1, RBOX
+            DO J = 1, RBOX
+                  DO K = 1, RBOX
+
+                  RR(1:3,COUNT) = (/X1+(I-1),Y1+(J-1),Z1+(K-1)/)
+                  RR(1:3,COUNT+1) = (/X2+(I-1),Y2+(J-1),Z2+(K-1)/)
+
+                  COUNT = COUNT + 2
+
+                  END DO
+            END DO
+      END DO
+
+      END SUBROUTINE CREATE_REF_LATTICE
+
 !***********************************************************************!
 
 !***********************************************************************!
