@@ -1138,21 +1138,17 @@
 
           CALL LMP_CASCADE
 
-          CALL LMP_RELAX
-
-          CALL RECV_LMP_POS
-
         ELSE IF (TDAM .EQ. 2) THEN
 
           IF (RANK==0) CALL ELECTRON_DAMAGE(NFREKL)
 
           CALL SEND_OPLD_POS
 
-          CALL LMP_RELAX
-
-          CALL RECV_LMP_POS
-
         END IF
+
+        CALL LMP_RELAX
+
+        CALL RECV_LMP_POS
 
         TIME_LAST = TIME
 
