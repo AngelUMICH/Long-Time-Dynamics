@@ -4,7 +4,7 @@ LMPLIB = /home/achavira/software/lammps/build/liblammps_linux.a
 LMPCWRAP = ./LAMMPS-wrapper.o
 LMPFLIB = ./LAMMPS.o
 
-OBJS = LAMMPS.o LAMMPS-wrapper.o DEFINE.o LMP.o INIT.o FUNCT.o FORCE.o DIMER.o MAIN.o OPT.o AKMC.o FINAL.o
+OBJS = LAMMPS.o LAMMPS-wrapper.o DEFINE.o LMP.o INIT.o FUNCT.o DIMER.o MAIN.o AKMC.o
 FLAGS = -O3 -g -fopenmp -std=legacy
 LIBS = -lgomp -lstdc++ -lm -ldl -ljpeg -lpng
 
