@@ -11,7 +11,6 @@
 !***********************************************************************!
 
 !***********************************************************************!
-!MAJOR SUBROUTINE OF SELF-EVOLVING ATOMISTIC KINETIC MONTE CARLO CODE**!
 
       SUBROUTINE OPLD
 
@@ -23,7 +22,6 @@
       IMPLICIT NONE
 
       INTEGER I,J
-      real*8, dimension(:), allocatable :: pos2
 
       DO ISTEP = 1,NTSTEP
 
@@ -75,6 +73,7 @@
 
       USE SYSTEM
       USE DEFECT
+      USE LMP_DRIVER
 
       INTEGER I
 
@@ -144,11 +143,11 @@
 
         IF(TRELAX) THEN
 
-          CALL OPT_CG_INIT(NATOMC)
+          CALL SEND_OPLD_POS
 
-          CALL OPT_CG
+          CALL LMP_RELAX
 
-          CALL OPT_CG_FINISH
+          CALL RECV_LMP_POS
 
           CALL DCIDNT
 
@@ -159,50 +158,6 @@
       RETURN
 
       END SUBROUTINE CBC
-!***********************************************************************!
-!THIS SUBROUTINE IS TO RECYCLE THE SADDLE POINTS
-
-      SUBROUTINE RSP
-
-      USE SYSTEM
-      USE DEFECT
-      USE KMCVAR
-
-      REAL*8 RX,RY,RZ,RS,TX,TY,TZ,TS,PBC
-
-!IF THE DEFECT INDEX IS THE SAME
-
-      IF(PX(7,1).EQ.OX(7)) THEN
-
-        RX = PBC(PX(1,1)-OX(1))
-        RY = PBC(PX(2,1)-OX(2))
-        RZ = PBC(PX(3,1)-OX(3))
-
-        RS = RX*RX + RY*RY+RZ*RZ
-
-!IF THE DEFECT POSITION IS THE SAME
-
-        IF(RS.LT.1.0D-8) THEN
-
-!THE INFORMATION CAN BE RECYCLYED
-
-          WRITE(*,'(A,I12,8F14.5)') 'RSP', 1, PX(1:4,1), OX(1:4)
-
-          SR = OR
-
-          EM = OE
-
-          ND = ON
-
-          PX(5,1) = 0.0D0
-
-        ENDIF
-
-      ENDIF
-
-      RETURN
-
-      END SUBROUTINE RSP
 !***********************************************************************!
 !THIS SUBROUTINE IS TO PERFORM SADDLE POINT SEARCHING
 
@@ -1096,8 +1051,6 @@
      #                'eV -> SKIPPING'
 
         ENDIF
-
-        !WRITING THE DIMER ENERGIES TO STD_KDIM.OUT
 
         WRITE(6,'(A,I10,A,F10.4)') 'EID: ',EID,'  RND: ',RND
 

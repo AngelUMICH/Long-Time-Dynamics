@@ -215,25 +215,6 @@
 
       ENDDO
 
-!!COMPARE THE CURRENT LATTICE WITH THE REFERENCE LATTICE
-
-C      DO J=1,NIONSREF
-C        DO I = 1,NIONS
-C          RX=PBC(POSION(1,I)-POSREF(1,J))
-C          IF(ABS(RX).GT.RCUTDEF) GOTO 100
-C          RY=PBC(POSION(2,I)-POSREF(2,J))
-C          IF(ABS(RY).GT.RCUTDEF) GOTO 100
-C          RZ=PBC(POSION(3,I)-POSREF(3,J))
-C          IF(ABS(RZ).GT.RCUTDEF) GOTO 100
-C          RD=RX*RX+RY*RY+RZ*RZ
-C          IF(RD.LE.RCUTDEFS) THEN
-C            IFLAG(I)=IFLAG(I)+1
-C            JFLAG(J)=JFLAG(J)+1
-C          ENDIF
-C100       CONTINUE
-C        ENDDO
-C      ENDDO
-
       RETURN
       END SUBROUTINE FIND_DEFECT
 !***********************************************************************!
