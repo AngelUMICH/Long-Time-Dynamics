@@ -1,4 +1,4 @@
-# Long-Time-Dynamics
+# Long-Time-Dynamics (OPLD)
 PhD Research Repository of Angel Chavira at the University of Michigan NERS department.
 
 ## Background
@@ -7,6 +7,18 @@ OPLD is a code which was designed to assist in the study of cascade overlap and 
 respectively. Irradiation cascades are modeled by two methods: random frenkel pair insertion analogous to electron irradiation and actual ion damage events
 whose dynamics are driven by traditional MD simulation. With atomic precision defects created by the damage events can be modeled by interatomic forces and 
 subsequently their transition states can be found by the dimer search.
+
+## Building Code
+
+### Requirements
+
+The LAMMPS **static** library must be built with the support of OpenMPI and must include any necessary packages needed to run MD such as the MANYBODY pakage (enables support for eam force styles). After the static library is built the path to the library must be included in the Makefile as well as the LAMMPS code source.
+
+### Next Steps
+
+Traditional make is used to create the binaries and the executables. Avoid using the multi-threaded make approach as this way of building is not consistent and might fail.
+
+As of now only one input file is provided by the user. This file specifies the values for various parameters. In the future the number of files provided by the user might increase. See next section for details on the input file.
 
 ## Sample Input file
 
