@@ -427,13 +427,16 @@
       !!SIMULATION AT A CERTAIN POINT FOR ANY REASON.
       SUBROUTINE RESTART
       
-      USE SYSTEM, ONLY: ISTEP, NATOMC, RA
+      USE SYSTEM
+      USE DEFECT
 
       IMPLICIT NONE
 
       INTEGER I, J
 
       CHARACTER(len = 200) FILENAME
+
+      IF (RANK .EQ. 0) THEN
 
       IF (MOD(ISTEP, 1000) .EQ. 0) THEN
 
@@ -450,9 +453,41 @@
 
         ENDDO
 
+        !SIMULATION MEASUREMENTS AND PARAMETERS
+
+        WRITE(27,*)
+
+        WRITE(27,*) 
+     #    'ISTEP, TIME, TIME_LAST, DTIME, DPA, DPAC, AVDPA, ONDSTOT'
+
+        WRITE(27,*) ISTEP
+        WRITE(27,*) TIME
+        WRITE(27,*) TIME_LAST
+        WRITE(27,*) DTIME
+        WRITE(27,*) DPA
+        WRITE(27,*) DPAC
+        WRITE(27,*) AVDPA
+        WRITE(27,*) ONDSTOT
+
+        !AVERAGE DEFECT MIGRATION ENERGIES
+
+        WRITE(27,*)
+
+        WRITE(27,*) 'MIGRATION ENERGIES (VACANCIES THEN INTERSTITIALS)'
+
+        DO I = 1, 50
+          WRITE(27,*) EMIG(1,I), EMIC(1,I)
+        END DO
+
+        DO I = 1, 50
+          WRITE(27,*) EMIG(2,I), EMIC(2,I)
+        END DO
+
       END IF
 
       CLOSE(27)
+
+      END IF
 
       END SUBROUTINE
 

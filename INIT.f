@@ -28,8 +28,8 @@
 
 !!READING SYSTEM PARAMTER, SEE PAR_INIT.DAT FOR DETAILS
 
-      READ(10,'(8(I10/),5(F10.3/),(I10/),9(F14.6/),(I10/),1(ES15.5))')
-     #TJOB,TDAM,TPBC,NTSTEP,NFREQ,NDEMAX,NAVMAX,NDIMER,
+      READ(10,'(9(I10/),5(F10.3/),(I10/),9(F14.6/),(I10/),1(ES15.5))')
+     #REST,TJOB,TDAM,TPBC,NTSTEP,NFREQ,NDEMAX,NAVMAX,NDIMER,
      #RLAT,RBOX,PCUTR,DCUTR,DECUT,NDRMAX,RDIMER,FNRMAX,FNRMIN,DSTEPF,
      #DSTEPM,EMSKIP,TEMP,PKAE,DRATE,NFREKL,TIME
 
@@ -61,11 +61,13 @@
       USE SYSTEM
       USE DEFECT
       USE KMCVAR
+      USE LMP_DRIVER
 
       IMPLICIT NONE
 
-      INTEGER :: N,I
+      INTEGER :: N,I,J
       INTEGER,ALLOCATABLE :: SEED(:)
+      LOGICAL :: EXISTS
 
 !!INITIALIZE OUTPUT FILE
 
@@ -90,16 +92,16 @@
         CALL EXECUTE_COMMAND_LINE('mkdir RESTART')
 
       END IF
+
 !!EITHER RANDOM SEED OR FIXED RANDOM SEED
 
       CALL RANDOM_SEED()
-
-!      SEED(1) = 214748722
 
       CALL RANDOM_SEED(SIZE=N)
       ALLOCATE(SEED(N))
       CALL RANDOM_SEED(GET=SEED)
 
+      BSTEP = 0
 
       FDCONV     = 1.0D-5
 
@@ -261,6 +263,67 @@
       do i = 21,50
        EMIG(2,i)=3.0
       enddo
+
+!!UPDATE PARAMETERS FROM RESTART FILE
+
+      IF (REST . EQ. 2) THEN
+
+      INQUIRE(FILE='RESTART.OUT', EXIST=EXISTS)
+
+      IF (.NOT. EXISTS) THEN
+
+            WRITE(*,*) "File 'RESTART.OUT' cannot be found."
+      
+            STOP
+      
+      END IF
+
+      OPEN(UNIT=27,FILE='RESTART.OUT')
+
+      !READ POSITIONS
+
+      READ(27,*) NATOMC
+
+      DO I = 1,NATOMC
+
+            READ(27,'(3F14.5)') (RA(J,I), J=1,3)
+
+      END DO
+
+      CALL SEND_OPLD_POS
+
+      !READ PREVIOUS SIMULATION PARAMETERS
+
+      READ(27,*)
+
+      READ(27,*)
+
+      READ(27,*) BSTEP
+      READ(27,*) TIME
+      READ(27,*) TIME_LAST
+      READ(27,*) DTIME
+      READ(27,*) DPA
+      READ(27,*) DPAC
+      READ(27,*) AVDPA
+      READ(27,*) ONDSTOT
+
+      !READ MIGRATION ENERGIES
+
+      READ(27,*)
+
+      READ(27,*)
+
+      DO I = 1, 50
+          READ(27,*) EMIG(1,I), EMIC(1,I)
+      END DO
+
+      DO I = 1, 50
+          READ(27,*) EMIG(2,I), EMIC(2,I)
+      END DO
+
+      CLOSE(27)
+
+      END IF
 
       RETURN
 
