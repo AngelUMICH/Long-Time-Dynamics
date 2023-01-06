@@ -18,8 +18,6 @@ The LAMMPS **static** library must be built with the support of OpenMPI and must
 
 Traditional make is used to create the binaries and the executables. Avoid using the multi-threaded make approach as this way of building is not consistent and might fail.
 
-As of now only one input file is provided by the user. This file specifies the values for various parameters. In the future the number of files provided by the user might increase. See next section for details on the input file.
-
 ## Sample Input file
 
 An input file named 'par_init.dat' must be availiable for the code to read in. Below is a sample of what the input file must look like. The ordering of 
@@ -27,6 +25,7 @@ parameters is important. The first column contains the values of the parameters,
 column within the brackets are the units of each parameters. To the right of the brackets is the data type of the parameters. Finally, the last column is a
 short description of each of the parameters.
 
+    1           # REST          [ --  ] I  Using Restart File? 1:No 2:Yes
     2           # TJOB    	    [ --  ] I  Job Type	: 1:Relaxation; 2:OPLD
     2           # TDAM          [ --  ] I  Irradition mode : 1:Cascade; 2:Electron
     1           # TPBC          [ --  ] I  Boundary Condition: 1: PBC 2: Absorbing Boundary Condition
@@ -52,3 +51,9 @@ short description of each of the parameters.
     1.20        # DRATE         [dpa/s] R  Irradiation Dose Rate
     10          # NFREKL        [ dpa ] I  Frenkel Pairs Per Damage Sequence (Electron Mode Only)
     0.000E+00   # TIME          [ s   ] R  Time
+
+## Using a Restart File
+
+A simulation can be restarted from specific points by use of a restart file. These restart files are created automatically and stored in the 'RESTART' directory. Restarting a simulation can be convinient because it can act as a checkpoint after a failed run. The information that is stored in the restart file are values and parameters which are not already stored in the 'par_init.dat' file. Only information that pertains to that specific simulation is stored such as migration energies for defects, statistical values pertaining to damage events, and atom positions.
+
+In order to use a restart file the correct option in the 'par_init.dat' file must be set. Also, the restart file must be placed in the working directory and renamed to **RESTART.OUT**. Using a restart file should not change any already created data in the working directory.
