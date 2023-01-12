@@ -228,9 +228,9 @@
 
       IMPLICIT NONE
 
-      INTEGER I
+      INTEGER I, J
 
-      CHARACTER(len = 200) FILENAME, STR
+      CHARACTER(len = 200) FILENAME
 
 !!CREATING THE CURRENT DEFECT POSITION FILE
 
@@ -269,6 +269,30 @@
       ENDDO
 
       CLOSE(29)
+
+!!CREATING DISLOCATION ANALYSIS FILE
+
+      WRITE(FILENAME, '(A12, I0, A4)') './DUMP/DXA/A', ISTEP, '.OUT'
+
+      OPEN(UNIT=30,FILE=TRIM(FILENAME))
+
+      WRITE(30,'(A)') 'ITEM: TIMESTEP'
+      WRITE(30,*) ISTEP
+      WRITE(30,'(A)') 'ITEM: NUMBER OF ATOMS'
+      WRITE(30,*) NATOMC
+      WRITE(30,'(A)') 'ITEM: BOX BOUNDS PP PP PP'
+      WRITE(30,'(2F10.4,I5)') 0.00,RBOX,3
+      WRITE(30,'(2F10.4,I5)') 0.00,RBOX,3
+      WRITE(30,'(2F10.4,I5)') 0.00,RBOX,3
+      WRITE(30,'(A)') 'ITEM: ATOMS x y z'
+
+      DO I = 1, NATOMC
+
+        WRITE(30,'(3F14.5)') (RA(J,I), J=1,3)
+
+      END DO
+
+      CLOSE(30)
 
       END SUBROUTINE OVITO
 !***********************************************************************!
