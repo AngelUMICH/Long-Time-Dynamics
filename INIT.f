@@ -88,6 +88,8 @@
       IF (RANK .EQ. 0) THEN
 
         CALL EXECUTE_COMMAND_LINE('mkdir DUMP')
+        
+        CALL EXECUTE_COMMAND_LINE('mkdir DUMP/DXA')
 
         CALL EXECUTE_COMMAND_LINE('mkdir RESTART')
 
