@@ -18,7 +18,11 @@ The LAMMPS **static** library must be built with the support of OpenMPI and must
 
 Traditional make is used to create the binaries and the executables. Avoid using the multi-threaded make approach as this way of building is not consistent and might fail.
 
-## Sample Input file
+### How to Use OPLD
+
+OPLD can be initiated two different ways: 1) new simulation or 2) restarted simulation. The former method of using OPLD requires only two input files: 'par_init.dat' and 'in.lammps'. Whereas, the latter method of using the code requires an additional file called 'RESTART.OUT'. As a note, the files must be included in the working directory with the correct name in order for the program to find them.
+
+## OPLD Input file
 
 An input file named 'par_init.dat' must be availiable for the code to read in. Below is a sample of what the input file must look like. The ordering of 
 parameters is important. The first column contains the values of the parameters, second columns are the names of the variables used in the code. In the third
@@ -51,6 +55,27 @@ short description of each of the parameters.
     1.20        # DRATE         [dpa/s] R  Irradiation Dose Rate
     10          # NFREKL        [ dpa ] I  Frenkel Pairs Per Damage Sequence (Electron Mode Only)
     0.000E+00   # TIME          [ s   ] R  Time
+
+## LAMMPS Input File
+The file named 'in.lammps' is one of the two files that must always be present when running any kind of simulation. This file is used to set various features within the LAMMPS ecosystem which is needed to calculate forces and energies of an entire system or a subset atomic volume. This that this file must always set is potential type and coefficients. Whenever, the program is not being used to restart a simulation (i.e not in restart mode) the LAMMPS input file must be used to specify the initial atomic coordinates. Through LAMMPS this can be done in various manners such as reading a LAMMPS data or restart file, or an XYZ file. Keep in mind that a LAMMPS restart file is not the same as the 'RESTART.OUT' which is an output of the OPLD software.
+
+The last thing that this input file must contain is the mass of all active species which is necessary for running a basic MD simulation. All other commands such as computes, groups, fixes, etc. should not be included into the file. The OPLD program all ready handles all necessary comptues and fixes. Including the other LAMMPS commands which are not sanction or stated here might cause the program to misbehave or crash.
+
+Below is a sample 'in.lammps' input file. In this example, the user has opted out from reading in a system using a restart file or a data file and instead has created the system from LAMMPS commands. The potential type and coefficients were also set. Finally, the user chose to change the timestep. Including this command will only have an effect when simulating cascades as all other parts of this code do not run dynamics.
+
+    lattice bcc 2.8553
+    region box block 0 30 0 30 0 30
+    create_box 1 box
+    create_atoms 1 box
+    mass 1 56.0
+    
+    pair_style eam/fs
+    pair_coeff * * FeP_mm.eam.fs Fe
+    neighbor 0 bin
+    
+    timestep 0.002
+
+When running this program in restart mode it is best to leave the LAMMPS input file the same as when the restart file was written. In other words, use the same 'in.lammps' file when using a 'RESTART.OUT' file. A restart file does not include information about the initial configuration of the system.
 
 ## Using a Restart File
 
