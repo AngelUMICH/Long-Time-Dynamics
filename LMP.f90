@@ -31,24 +31,15 @@ contains
     call lammps_open('lmp -log none -screen none', MPI_COMM_WORLD, lmp)
 
     !Setting up system in LAMMPS space
+
+    !Necessary commands for OPLD to work
     call lammps_command(lmp, 'units metal')
     call lammps_command(lmp, 'boundary p p p')
     call lammps_command(lmp, 'atom_style atomic')
     call lammps_command(lmp, 'atom_modify map array')
-    call lammps_command(lmp, 'lattice bcc 2.8553')
 
-    call lammps_command(lmp, 'region box block 0 30 0 30 0 30')
-    call lammps_command(lmp, 'create_box 1 box')
-    call lammps_command(lmp, 'create_atoms 1 box')
-    call lammps_command(lmp, 'mass 1 56.0')
-
-    call lammps_command(lmp, 'pair_style eam/fs')
-    call lammps_command(lmp, 'pair_coeff * * FeP_mm.eam.fs Fe')
-    call lammps_command(lmp, 'neighbor 0 bin')
-
-    call lammps_command(lmp, 'velocity all zero linear')
-    call lammps_command(lmp, 'timestep 0.001')
-    call lammps_command(lmp, 'thermo 200')
+    !Read from input file using LAMMPS
+    call lammps_file(lmp, 'in.lammps')
 
     !Including necessary computes
     call lammps_command(lmp, 'compute TotEn all pe')
@@ -72,25 +63,20 @@ contains
     !attaches lammps object to pointer variable lmp
     call lammps_open('lmp -log none -screen none', DIMER_COMM, lmpDimer)
 
-    !Setting up system in LAMMPS space
+    !Necessary commands for OPLD to work
     call lammps_command(lmpDimer, 'units metal')
     call lammps_command(lmpDimer, 'boundary p p p')
     call lammps_command(lmpDimer, 'atom_style atomic')
     call lammps_command(lmpDimer, 'atom_modify map array')
-    call lammps_command(lmpDimer, 'lattice bcc 2.8553')
 
-    call lammps_command(lmpDimer, 'region box block 0 30 0 30 0 30')
-    call lammps_command(lmpDimer, 'create_box 1 box')
-    !call lammps_command(lmpDimer, 'create_atoms 1 box')
-    call lammps_command(lmpDimer, 'mass 1 56.0')
+    !Read from input file using LAMMPS
+    call lammps_file(lmpDimer, 'in.lammps')
 
-    call lammps_command(lmpDimer, 'pair_style eam/fs')
-    call lammps_command(lmpDimer, 'pair_coeff * * FeP_mm.eam.fs Fe')
-    call lammps_command(lmpDimer, 'neighbor 0 bin')
+    !Dimer lammps object initially has no atoms in it
+    call lammps_command(lmpDimer, 'delete_atoms group all')
+
+    !Optimization for Dimer force/energy calculations
     call lammps_command(lmpDimer, 'neigh_modify every 2 delay 10 check yes')
-
-    call lammps_command(lmpDimer, 'timestep 0.001')
-    call lammps_command(lmpDimer, 'thermo 200')
 
   end subroutine LMP_DIMER_INIT
 
