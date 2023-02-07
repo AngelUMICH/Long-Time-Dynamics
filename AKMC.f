@@ -1029,17 +1029,24 @@
           K=2
         ENDIF
 
-        I = ABS(INT(PX(6,1)))
-
-        EMIG(K,I) = (EMIG(K,I)*EMIC(K,I) + EM(EID)) / (EMIC(K,I)+1)
-
-        EMIC(K,I) = EMIC(K,I) + 1
 
         !CHECKING FOR TOO HIGH TRANSITION ENERGY
 
         IF (EM(EID) .LE. EMSKIP .AND. EID .LE. NDIMER) THEN
 
           TIME = TIME + TMEAN
+
+          !ONLY POSITIVE SADDLE POINT ENERGIES WILL BE USED IN AVERAGE
+
+          IF (EM(EID) .GT. 0) THEN
+
+            I = ABS(INT(PX(6,1)))
+
+            EMIG(K,I) = (EMIG(K,I)*EMIC(K,I) + EM(EID)) / (EMIC(K,I)+1)
+
+            EMIC(K,I) = EMIC(K,I) + 1
+
+          END IF
 
         ELSE
 
