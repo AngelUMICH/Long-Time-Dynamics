@@ -894,6 +894,8 @@
 
       SUBROUTINE DIMER_ROTATESTEP(THIS)
 
+      USE SYSTEM, ONLY: ISTEP,NFREQ
+
       IMPLICIT NONE
 
       TYPE(DIMER),INTENT(INOUT) :: THIS
@@ -929,7 +931,9 @@
 
         IF(ABS(THIS%ROGAMN).GT.1.0D0) THEN
 
+          IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
           WRITE(*,*) 'ROGAMN.GT.1.00'
+          ENDIF
 
           THIS%ROGAMN = 0.0D0
 

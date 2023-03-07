@@ -231,7 +231,9 @@
 
           ENDDO
 
+          IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
           WRITE(*,'(A,1I12,F14.5)') 'SPS',J,EM(J)
+          ENDIF
 
           CALL DIMER_FINISH(ADIMER)
 
@@ -316,11 +318,13 @@
         !JID:DEFECT ID,EID:EVENT ID,EM:MIGRATION ENERGY BARRIER
         !ENCALC:THE SYSTEM ENERGY AFTER OPT,TIME:CURRENT TIME
 
+        IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
         WRITE(*,'(3X, 2A12, 2A14, 2A14)') 'STEP','DIMER ID','BARRIER',
      #    'SYS ENERGY', 'TIME', 'DPA'
 
         WRITE(*,'(A,2I12,2F14.5,2E14.5)') 'ITR',ISTEP,EID,EM(EID),
      #    ENCALC,TIME,DPA
+        ENDIF
 
         !THIS IS FOR WRITING SADDLE AND FINAL ENERGY AFTER INITIAL ENERGY
      
@@ -514,7 +518,9 @@
         ENDIF
        ENDDO
 
+       IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
        write(6,"(a35,i8)")"cluster :: 1_vac :: numbers=",nvac1
+       ENDIF
 
        DO i=1,NDTOT
         IF(Neighbor(i)==1)THEN
@@ -523,8 +529,9 @@
          endif
         ENDIF
        ENDDO
-
+       IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
        write(6,"(a35,i8)")"cluster :: 1_int :: numbers=",nint1
+       ENDIF
 
        DO i=1,NDTOT
         IF(Neighbor(i)==1)THEN
@@ -836,8 +843,10 @@
 
         PX(:,I) = PTEMP(:,I)
 
+        IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
         WRITE(*,'(A,I12,6(F14.5),I12)') 'DCIDNT',I,PX(1:6,I),
      #    INT(PX(7,I))
+        ENDIF
 
         IF (PX(6,I) .GT. 0) NDSTOT = NDSTOT + PX(6,I)
 
@@ -909,7 +918,7 @@
       scalef = dt*float(jmapsz)
 
       CALL RANDOM_NUMBER(RND)
-      write(6,*) rnd
+!      write(6,*) rnd
       prop = rnd*float(jmapsz)
 
       sump = 0.0
@@ -947,8 +956,10 @@
 
         PX(:,I) = PTEMP(:,I)
 
+      IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
       WRITE(*,'(A,I12,6(F14.5),I12)') 'DFSEL',I,PX(1:6,I),
      #INT(PX(7,I))
+      ENDIF
 
       ENDDO
 
@@ -1059,7 +1070,9 @@
 
         ENDIF
 
+        IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
         WRITE(6,'(A,I10,A,F10.4)') 'EID: ',EID,'  RND: ',RND
+        ENDIF
 
       END IF
 
