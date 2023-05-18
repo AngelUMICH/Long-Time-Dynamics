@@ -888,14 +888,14 @@
       REAL*8 RX,RY,RZ,RS,PBC,PTEMP(7,NDEMAX)
       REAL*8 rnd,speed,dt,scalef,sump,prop
       integer :: i,j,k,jmapsz,ijump
-      REAL*8, allocatable, dimension(:,:) :: pj
+      REAL*8, allocatable, dimension(:) :: pj
 
       SKIP = .FALSE.
 
       speed = 0.0d0
       jmapsz = 1000
 
-      allocate(pj(1:2,1:ndtot))
+      allocate(pj(1:ndtot))
 
       do i= 1,ndtot
        j = abs(px(6,i))
@@ -906,12 +906,12 @@
        endif
 
        if(j.lt.50) then
-        pj(k,j) = 1.0D12*exp(-emig(k,j)/kb/temp)
+        pj(i) = 1.0D12*exp(-emig(k,j)/kb/temp)
        else
-        pj(k,j) = 1.0D12*exp(-emig(k,50)/kb/temp)
+        pj(i) = 1.0D12*exp(-emig(k,50)/kb/temp)
        endif
 
-       speed = speed + pj(k,j)
+       speed = speed + pj(i)
       enddo
 
       dt = 1.0/speed
@@ -931,7 +931,7 @@
         k=2
        endif
 
-       sump = sump + pj(k,j)*scalef
+       sump = sump + pj(i)*scalef
        if(sump.ge.prop) goto 200
       enddo
 
@@ -952,16 +952,11 @@
 
 !RESORTING,PX STORES THE POSITIONS OF THE ACTIVE VOLUMES
 
-      DO I=1,NDTOT
-
-        PX(:,I) = PTEMP(:,I)
+      PX(:,1) = PTEMP(:,1)
 
       IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-      WRITE(*,'(A,I12,6(F14.5),I12)') 'DFSEL',I,PX(1:6,I),
-     #INT(PX(7,I))
+        WRITE(*,'(A,I12,6(F14.5),I12)') 'DFSEL',1,PX(1:6,1),INT(PX(7,1))
       ENDIF
-
-      ENDDO
 
       deallocate(pj)
 
@@ -1063,15 +1058,15 @@
 
           SKIP = .TRUE.
 
-          WRITE(STR,'(F8.5)') EMSKIP
-
-          WRITE(6,*) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)//
-     #                'eV -> SKIPPING'
+          IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
+            WRITE(STR,'(F8.5)') EMSKIP
+            WRITE(6,*) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)//'eV -> SKIPPING'
+          END IF
 
         ENDIF
 
         IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-        WRITE(6,'(A,I10,A,F10.4)') 'EID: ',EID,'  RND: ',RND
+          WRITE(6,'(A,I10,A,F10.4)') 'EID: ',EID,'  RND: ',RND
         ENDIF
 
       END IF

@@ -5,7 +5,7 @@ LMPCWRAP = ./LAMMPS-wrapper.o
 LMPFLIB = ./LAMMPS.o
 
 OBJS = LAMMPS.o LAMMPS-wrapper.o DEFINE.o LMP.o INIT.o FUNCT.o DIMER.o MAIN.o AKMC.o
-FLAGS = -O3 -g -fopenmp -std=legacy
+FLAGS = -O3 -g -fopenmp -std=legacy -ffixed-line-length-132
 LIBS = -lgomp -lstdc++ -lm -ldl -ljpeg -lpng
 
 opld: $(OBJS)
