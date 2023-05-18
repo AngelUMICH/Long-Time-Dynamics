@@ -839,23 +839,45 @@
 
       NDSTOT = 0
 
+      WRITE(*,'(6X,A8,4A14,A8)') '#', 'X','Y','Z','AV RADIUS','SIZE'
+
       DO I=1,NDTOT
 
         PX(:,I) = PTEMP(:,I)
 
         IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-        WRITE(*,'(A,I12,6(F14.5),I12)') 'DCIDNT',I,PX(1:6,I),
-     #    INT(PX(7,I))
+          !PRINT TO STDOUT
+          WRITE(*,'(A,I8,4(F14.5),I8)') 'DCIDNT',I,PX(1:4,I),INT(PX(6,I))
+          !WRITE DEFECT IN CSV FILE
+          IF(I .NE. 1000) THEN
+            WRITE(24, '(I0,X)', ADVANCE="NO") INT(PX(6,I))
+          ELSE
+            WRITE(24, '(I0)', ADVANCE="NO") INT(PX(6,I))
+          END IF
         ENDIF
 
         IF (PX(6,I) .GT. 0) NDSTOT = NDSTOT + PX(6,I)
 
       ENDDO
 
+      !PAD CSV WITH 0 FOR NUMPY COMPATIBILITY
+      IF(NDTOT .LT. 1000) THEN
+        DO I=1,1000-NDTOT
+          IF (I .NE. 1000-NDTOT) THEN
+            WRITE(24,'(I0,X)',ADVANCE="NO") 0
+          ELSE
+            WRITE(24,'(I0)',ADVANCE="NO") 0
+          END IF
+        END DO
+      ELSE IF (NDTOT .GT. 1000) THEN
+        WRITE(24,*)
+        WRITE(24, '(A)',ADVANCE='NO') 'Total number of defects greater than csv limit of 1000 per line.'
+      END IF
+      !SKIP TO NEW LINE AFTER ALL DEFECTS ARE STORED IN CSV
+      WRITE(24,*)
+
       IF(CALC) CALL MD_DPA
-
       ONDTOT = NDTOT
-
       ONDSTOT = NDSTOT
 
 !IF NO DEFECT IS PRESENT, STOP THE PROGRM
