@@ -232,7 +232,7 @@
           ENDDO
 
           IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-          WRITE(*,'(A,1I12,F14.5)') 'SPS',J,EM(J)
+            WRITE(*,'(A,1I12,F14.5)') 'SPS',J,EM(J)
           ENDIF
 
           CALL DIMER_FINISH(ADIMER)
@@ -839,7 +839,9 @@
 
       NDSTOT = 0
 
-      WRITE(*,'(6X,A8,4A14,A8)') '#', 'X','Y','Z','AV RADIUS','SIZE'
+      IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
+        WRITE(*,'(6X,A8,4A14,A8)') '#', 'X','Y','Z','AV RADIUS','SIZE'
+      END IF
 
       DO I=1,NDTOT
 
