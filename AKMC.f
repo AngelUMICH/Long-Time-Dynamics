@@ -92,9 +92,9 @@
 !IF THE DEFECT IS CLOSE TO THE BOUNDARY (LESS THAN 1 LATTICE CONSTANT) 
 !IT IS CONSIDERED TO BE REMOVED FROM THE SYSTEM
 
-         IF((PX(1,I).GT.(RBOX-1.0D0)).OR.(PX(1,I).LT.1.0D0)) TOUT=.TRUE.
-         IF((PX(2,I).GT.(RBOX-1.0D0)).OR.(PX(2,I).LT.1.0D0)) TOUT=.TRUE.
-         IF((PX(3,I).GT.(RBOX-1.0D0)).OR.(PX(3,I).LT.1.0D0)) TOUT=.TRUE.
+         IF((PX(1,I).GT.(RBOX*EPSX-1.0D0)).OR.(PX(1,I).LT.1.0D0)) TOUT=.TRUE.
+         IF((PX(2,I).GT.(RBOX*EPSY-1.0D0)).OR.(PX(2,I).LT.1.0D0)) TOUT=.TRUE.
+         IF((PX(3,I).GT.(RBOX*EPSZ-1.0D0)).OR.(PX(3,I).LT.1.0D0)) TOUT=.TRUE.
 
           IF(TOUT) THEN
 
@@ -175,18 +175,18 @@
 
       TYPE(DIMER) :: ADIMER
 
-      INTEGER :: I,J,K
+      INTEGER :: J,K
 
       INTEGER :: RA_LEN, SR_LEN
 
 !CLEAR ALL DATA
 
       SR = 0.0D0
-
+      IF (RANK .EQ. 0) SRBUFF = 0.0D0
       EM = 0.0D0
-
+      IF (RANK .EQ. 0) EMBUFF = 0.0D0
       ND = 0.0D0
-
+      IF (RANK .EQ. 0) NDBUFF = 0.0D0
 !MPI VARIABLES
 
       RA_LEN = SIZE(RA)
@@ -232,7 +232,7 @@
           ENDDO
 
           IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-          WRITE(*,'(A,1I12,F14.5)') 'SPS',J,EM(J)
+          WRITE(*,'(A,1I12,F17.8)') 'SPS',J,EM(J)
           ENDIF
 
           CALL DIMER_FINISH(ADIMER)
@@ -243,14 +243,11 @@
 
 !GATHER RESULTS ON MAIN RANK
 
-      CALL MPI_REDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, 0,
-     &                MPI_COMM_WORLD, IERR)
+      CALL MPI_REDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, 0,MPI_COMM_WORLD, IERR)
 
-      CALL MPI_REDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, 0,
-     &                MPI_COMM_WORLD, IERR)
+      CALL MPI_REDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, 0,MPI_COMM_WORLD, IERR)
 
-      CALL MPI_REDUCE(ND, NDBUFF, NDIMER, MPI_INT, MPI_SUM, 0,
-     &                MPI_COMM_WORLD, IERR)
+      CALL MPI_REDUCE(ND, NDBUFF, NDIMER, MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD, IERR)
 
       !SO THAT CODE CAN CONTINUE AS NORMAL
 
@@ -319,11 +316,11 @@
         !ENCALC:THE SYSTEM ENERGY AFTER OPT,TIME:CURRENT TIME
 
         IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-        WRITE(*,'(3X, 2A12, 2A14, 2A14)') 'STEP','DIMER ID','BARRIER',
-     #    'SYS ENERGY', 'TIME', 'DPA'
+        WRITE(*,'(3X, 2A12, 10A14)') 'STEP','DIMER ID','BARRIER',
+     #    'SYS ENERGY', 'TIME', 'P_X', 'P_Y', 'P_Z', 'EPSX', 'EPSY', 'EPSZ', 'DPA'
 
-        WRITE(*,'(A,2I12,2F14.5,2E14.5)') 'ITR',ISTEP,EID,EM(EID),
-     #    ENCALC,TIME,DPA
+        WRITE(*,'(A,2I12,2F14.5,4E14.5,3F14.7,E14.5)') 'ITR',ISTEP,EID,EM(EID),
+     #    ENCALC,TIME,PRESS(1),PRESS(2),PRESS(3),EPSX,EPSY,EPSZ,DPA
         ENDIF
 
         !THIS IS FOR WRITING SADDLE AND FINAL ENERGY AFTER INITIAL ENERGY
@@ -359,10 +356,10 @@
 
       INTEGER I,J,NTEMP
 
-      REAL*8 RX,RY,RZ,RS,PBC,PTEMP(7,NDEMAX)
+      REAL*8 RX,RY,RZ,PBC,PTEMP(7,NDEMAX)
       double precision :: dr
       integer, allocatable, dimension(:) :: idnewdef
-      integer :: newdef, nvac1, nint1
+      integer :: newdef, nvac1, nint1, sumInt, sumVac
       integer :: k, l, m, n, itf
       integer, allocatable, dimension(:) :: Neighbor
       integer, allocatable, dimension(:,:) :: NNeighbor
@@ -381,9 +378,7 @@
       IF (ISTEP .EQ. 1)THEN
 
         ISTEP = 0
-
         CALL OVITO
-
         ISTEP = 1
 
       END IF
@@ -460,6 +455,8 @@
 
       ENDDO
 
+      print *, ndtot, NDVAC, NDINT
+
       allocate(Neighbor(1:NDTOT))
       allocate(NNeighbor(1:NDTOT,1:NDTOT))
 
@@ -474,9 +471,9 @@
         DO J=1,NDTOT
 
          IF(i==j)CYCLE
-          RX=PBC(PX(1,I)-PX(1,J))
-          RY=PBC(PX(2,I)-PX(2,J))
-          RZ=PBC(PX(3,I)-PX(3,J))
+          RX=PBC(PX(1,I)-PX(1,J),1)
+          RY=PBC(PX(2,I)-PX(2,J),2)
+          RZ=PBC(PX(3,I)-PX(3,J),3)
 
           dr=sqrt(RX*RX+RY*RY+RZ*RZ)
 
@@ -646,18 +643,18 @@
         I = iiticn(1)
         J = iiticn(K)
 
-        if((px(1,i)<1.0.or.px(1,j)>rbox-1.0).or.
-     >     (px(1,j)<1.0.or.px(1,i)>rbox-1.0)) then
+        if((px(1,i)<1.0.or.px(1,j)>rbox*EPSX-1.0).or.
+     >     (px(1,j)<1.0.or.px(1,i)>rbox*EPSX-1.0)) then
            ijpcx = 1
         end if
 
-        if((px(2,i)<1.0.or.px(2,j)>rbox-1.0).or.
-     >     (px(2,j)<1.0.or.px(2,i)>rbox-1.0)) then
+        if((px(2,i)<1.0.or.px(2,j)>rbox*EPSY-1.0).or.
+     >     (px(2,j)<1.0.or.px(2,i)>rbox*EPSY-1.0)) then
            ijpcy = 1
         end if
 
-        if((px(3,i)<1.0.or.px(3,j)>rbox-1.0).or.
-     >     (px(3,j)<1.0.or.px(3,i)>rbox-1.0)) then
+        if((px(3,i)<1.0.or.px(3,j)>rbox*EPSZ-1.0).or.
+     >     (px(3,j)<1.0.or.px(3,i)>rbox*EPSZ-1.0)) then
            ijpcz = 1
         end if
 
@@ -673,26 +670,26 @@
         do K=1,iticn
 
          if(ijpcx==1) then
-          if(PTEMP(1,K)<RBH1) then
-           PTEMP(1,K) = PTEMP(1,K) + RBH1
+          if(PTEMP(1,K)<RBH1*EPSX) then
+           PTEMP(1,K) = PTEMP(1,K) + RBH1*EPSX
           else
-           PTEMP(1,K) = PTEMP(1,K) - RBH1
+           PTEMP(1,K) = PTEMP(1,K) - RBH1*EPSX
           end if
          endif
 
          if(ijpcy==1) then
-          if(PTEMP(2,K)<RBH1) then
-           PTEMP(2,K) = PTEMP(2,K) + RBH1
+          if(PTEMP(2,K)<RBH1*EPSY) then
+           PTEMP(2,K) = PTEMP(2,K) + RBH1*EPSY
           else
-           PTEMP(2,K) = PTEMP(2,K) - RBH1
+           PTEMP(2,K) = PTEMP(2,K) - RBH1*EPSY
           end if
          endif
 
          if(ijpcz==1) then
-          if(PTEMP(3,K)<RBH1) then
-           PTEMP(3,K) = PTEMP(3,K) + RBH1
+          if(PTEMP(3,K)<RBH1*EPSZ) then
+           PTEMP(3,K) = PTEMP(3,K) + RBH1*EPSZ
           else
-           PTEMP(3,K) = PTEMP(3,K) - RBH1
+           PTEMP(3,K) = PTEMP(3,K) - RBH1*EPSZ
           end if
          endif
 
@@ -725,26 +722,26 @@
         do K=1,iticn
 
          if(ijpcx==1) then
-          if(PTEMP(1,K)<RBH1) then
-           PTEMP(1,K) = PTEMP(1,K) + RBH1
+          if(PTEMP(1,K)<RBH1*EPSX) then
+           PTEMP(1,K) = PTEMP(1,K) + RBH1*EPSX
           else
-           PTEMP(1,K) = PTEMP(1,K) - RBH1
+           PTEMP(1,K) = PTEMP(1,K) - RBH1*EPSX
           end if
          endif
 
          if(ijpcy==1) then
-          if(PTEMP(2,K)<RBH1) then
-           PTEMP(2,K) = PTEMP(2,K) + RBH1
+          if(PTEMP(2,K)<RBH1*EPSY) then
+           PTEMP(2,K) = PTEMP(2,K) + RBH1*EPSY
           else
-           PTEMP(2,K) = PTEMP(2,K) - RBH1
+           PTEMP(2,K) = PTEMP(2,K) - RBH1*EPSY
           end if
          endif
 
          if(ijpcz==1) then
-          if(PTEMP(3,K)<RBH1) then
-           PTEMP(3,K) = PTEMP(3,K) + RBH1
+          if(PTEMP(3,K)<RBH1*EPSZ) then
+           PTEMP(3,K) = PTEMP(3,K) + RBH1*EPSZ
           else
-           PTEMP(3,K) = PTEMP(3,K) - RBH1
+           PTEMP(3,K) = PTEMP(3,K) - RBH1*EPSZ
           end if
          endif
 
@@ -838,6 +835,7 @@
 !RESORTING,PX STORES THE POSITIONS OF THE ACTIVE VOLUMES
 
       NDSTOT = 0
+      sumInt = 0; sumVac = 0
 
       DO I=1,NDTOT
 
@@ -848,9 +846,12 @@
      #    INT(PX(7,I))
         ENDIF
 
-        IF (PX(6,I) .GT. 0) NDSTOT = NDSTOT + PX(6,I)
+        IF (PX(6,I) .GT. 0) sumInt = sumInt + int(abs(PX(6,I)))
+        IF (PX(6,I) .LT. 0) sumVac = sumVac + int(abs(PX(6,I)))
 
       ENDDO
+
+      NDSTOT = MAX(sumInt, sumVac)
 
       IF(CALC) CALL MD_DPA
 
@@ -885,7 +886,7 @@
 
       IMPLICIT NONE
 
-      REAL*8 RX,RY,RZ,RS,PBC,PTEMP(7,NDEMAX)
+      REAL*8 PTEMP(7,NDEMAX)
       REAL*8 rnd,speed,dt,scalef,sump,prop
       integer :: i,j,k,jmapsz,ijump
       REAL*8, allocatable, dimension(:,:) :: pj
@@ -898,7 +899,7 @@
       allocate(pj(1:2,1:ndtot))
 
       do i= 1,ndtot
-       j = abs(px(6,i))
+       j = int(abs(px(6,i)))
        if(px(6,i).lt.0) then
         k=1
        else
@@ -906,12 +907,12 @@
        endif
 
        if(j.lt.50) then
-        pj(k,j) = 1.0D12*exp(-emig(k,j)/kb/temp)
+        pj(k,i) = 1.0D12*exp(-emig(k,j)/kb/temp)
        else
-        pj(k,j) = 1.0D12*exp(-emig(k,50)/kb/temp)
+        pj(k,i) = 1.0D12*exp(-emig(k,50)/kb/temp)
        endif
 
-       speed = speed + pj(k,j)
+       speed = speed + pj(k,i)
       enddo
 
       dt = 1.0/speed
@@ -924,14 +925,14 @@
       sump = 0.0
 
       do i = 1,ndtot
-       j = abs(px(6,i))
+       j = int(abs(px(6,i)))
        if(px(6,i).lt.0) then
         k=1
        else
         k=2
        endif
 
-       sump = sump + pj(k,j)*scalef
+       sump = sump + pj(k,i)*scalef
        if(sump.ge.prop) goto 200
       enddo
 
@@ -957,8 +958,7 @@
         PX(:,I) = PTEMP(:,I)
 
       IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-      WRITE(*,'(A,I12,6(F14.5),I12)') 'DFSEL',I,PX(1:6,I),
-     #INT(PX(7,I))
+        WRITE(*,'(A,I12,6(F14.5),I12)') 'DFSEL',I,PX(1:6,I),INT(PX(7,I))
       ENDIF
 
       ENDDO
@@ -983,7 +983,7 @@
 
       IMPLICIT NONE
 
-      INTEGER I,J,K,COUNTER,jmapsz
+      INTEGER I,K,jmapsz
 
       REAL*8 RND,dt,scalef,prop
 
@@ -1101,19 +1101,19 @@
 
           WRITE(*,'(3A14)') 'TIME',' TIME_LAST',' DTIME'
 
-          WRITE(*,'(2F14.3,SE14.3)') TIME, TIME_LAST, DTIME
+          WRITE(*,'(2E14.5,E14.5)') TIME, TIME_LAST, DTIME
 
         END IF
 
-        IF (TDAM .EQ. 1) THEN
+        IF (TDAM .EQ. 1) THEN ! Cascade
 
           CALL SEND_OPLD_POS
 
           CALL LMP_CASCADE
 
-        ELSE IF (TDAM .EQ. 2) THEN
+        ELSE IF (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN ! Electron or Vacancy
 
-          IF (RANK==0) CALL ELECTRON_DAMAGE(NFREKL)
+          CALL BASIC_DAMAGE(NFREKL)
 
           CALL SEND_OPLD_POS
 

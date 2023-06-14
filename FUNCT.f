@@ -13,7 +13,39 @@
 !***********************************************************************!
 !!APPLY THE PERIODIC BOUNDARY CONDITION TO THE SYSTEM
 
-      REAL*8 FUNCTION PBC(X)
+      REAL*8 FUNCTION PBC(X,DIM)
+
+      USE SYSTEM,ONLY : RBOX,RBH1,RBH2,EPSX,EPSY,EPSZ
+
+      IMPLICIT NONE
+
+      INTEGER DIM
+      REAL*8 X, EPS
+
+      IF (DIM .EQ. 1) THEN
+        EPS = EPSX
+      ELSEIF (DIM .EQ. 2) THEN
+        EPS = EPSY
+      ELSEIF (DIM .EQ. 3) THEN
+        EPS = EPSZ
+      END IF
+      
+      IF((X.LE.RBH1*EPS).AND.(X.GE.RBH2*EPS)) THEN
+        PBC = X
+      ELSEIF(X.LT.RBH2*EPS) THEN
+        PBC = X + RBOX*EPS
+      ELSE
+        PBC = X - RBOX*EPS
+      ENDIF
+
+      RETURN
+
+      END
+      
+!***********************************************************************!
+!!PERIODIC CONDIITONS ONLY USED FOR FINDING DEFECTS
+
+      REAL*8 FUNCTION PBC_DEFECT(X)
 
       USE SYSTEM,ONLY : RBOX,RBH1,RBH2
 
@@ -21,25 +53,19 @@
 
       REAL*8 X
 
-!      PBC = X-RBOX*NINT(X/RBOX)
+!      PBC_DEFECT = X-RBOX*NINT(X/RBOX)
 
       IF((X.LE.RBH1).AND.(X.GE.RBH2)) THEN
-
-        PBC = X
-
+        PBC_DEFECT = X
       ELSEIF(X.LT.RBH2) THEN
-
-        PBC = X + RBOX
-
+        PBC_DEFECT = X + RBOX
       ELSE
-
-        PBC = X - RBOX
-
+        PBC_DEFECT = X - RBOX
       ENDIF
 
       RETURN
 
-      END
+      END FUNCTION
 !***********************************************************************!
 !!IDENTIFY THE DEFECT/CENTER OF AV IN THE SYSTEM
 !!THIS ALGORITHM IS ONLY VALID FOR BCC SYSTEM,E.G. IRON
@@ -53,11 +79,7 @@
 
       IMPLICIT NONE
 
-      REAL*8 RX,RY,RZ,RD,RS,PBC
-
-      INTEGER I,J,NBOX
-
-      INTEGER IX,IY,IZ,JX,JY,JZ,RX1,RY1,RZ1,RX2,RY2,RZ2
+      INTEGER I
 
       NDINT = 0
 
@@ -67,9 +89,66 @@
 
       TV = 0
 
-      NBOX = INT(RBOX)*2
+!!SCALE DOWN POSITIONS TO CUBE
+      DO I=1,NATOMC
+        RA(1,I) = RA(1,I)/EPSX
+        RA(2,I) = RA(2,I)/EPSY
+        RA(3,I) = RA(3,I)/EPSZ
+      END DO
 
-!!! COULD USE OPENMP
+      IF (TCRY .EQ. 1) THEN
+        CALL SINGLE_CRYSTAL_WS
+      ELSE IF (TCRY .EQ. 2) THEN
+        CALL POLY_CRYSTAL_WS
+      END IF
+      
+!!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
+
+      DO I=1,NATOMC
+
+        IF(TI(I).NE.1) THEN
+
+          NDINT = NDINT + 1
+
+        ENDIF
+
+      ENDDO
+
+      DO I=1,NATOMR
+
+        IF(TV(I).NE.1) THEN
+
+          NDVAC = NDVAC + 1
+
+        ENDIF
+
+      ENDDO
+
+!!RESCALE ATOM POSITIONS TO ORIGINAL VALUES
+      DO I=1,NATOMC
+        RA(1,I) = RA(1,I)*EPSX
+        RA(2,I) = RA(2,I)*EPSY
+        RA(3,I) = RA(3,I)*EPSZ
+      END DO
+
+      RETURN
+      END SUBROUTINE FIND_DEFECT
+!***********************************************************************!
+      SUBROUTINE SINGLE_CRYSTAL_WS
+
+      USE SYSTEM
+
+      USE DEFECT
+
+      IMPLICIT NONE
+
+      REAL*8 RX,RY,RZ,RS,PBC_DEFECT
+
+      INTEGER I,J,NBOX
+
+      INTEGER IX,IY,IZ,JX,JY,JZ,RX1,RY1,RZ1,RX2,RY2,RZ2
+
+      NBOX = INT(RBOX)*2
 
       DO I=1,NATOMC
 
@@ -151,11 +230,11 @@
 
         ENDIF
 
-        RX=PBC(DFLOAT(RX1)*0.5D0-RA(1,I))
+        RX=PBC_DEFECT(DFLOAT(RX1)*0.5D0-RA(1,I))
 
-        RY=PBC(DFLOAT(RY1)*0.5D0-RA(2,I))
+        RY=PBC_DEFECT(DFLOAT(RY1)*0.5D0-RA(2,I))
 
-        RZ=PBC(DFLOAT(RZ1)*0.5D0-RA(3,I))
+        RZ=PBC_DEFECT(DFLOAT(RZ1)*0.5D0-RA(3,I))
 
         RS=RX*RX+RY*RY+RZ*RZ
 
@@ -171,11 +250,11 @@
 
         ENDIF
 
-        RX=PBC(DFLOAT(RX2)*0.5D0-RA(1,I))
+        RX=PBC_DEFECT(DFLOAT(RX2)*0.5D0-RA(1,I))
 
-        RY=PBC(DFLOAT(RY2)*0.5D0-RA(2,I))
+        RY=PBC_DEFECT(DFLOAT(RY2)*0.5D0-RA(2,I))
 
-        RZ=PBC(DFLOAT(RZ2)*0.5D0-RA(3,I))
+        RZ=PBC_DEFECT(DFLOAT(RZ2)*0.5D0-RA(3,I))
 
         RS=RX*RX+RY*RY+RZ*RZ
 
@@ -192,31 +271,67 @@
         ENDIF
 
       ENDDO
-      
-!!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
 
-      DO I=1,NATOMC
+      END SUBROUTINE SINGLE_CRYSTAL_WS
+!***********************************************************************!
+      SUBROUTINE POLY_CRYSTAL_WS
 
-        IF(TI(I).NE.1) THEN
+      USE OMP_LIB
+      USE SYSTEM
+      USE DEFECT
 
-          NDINT = NDINT + 1
+      IMPLICIT NONE
 
-        ENDIF
+      REAL*8 RX,RY,RZ,RS,RMIN,PBC_DEFECT
+      INTEGER I,J,MIN,N,ATOM
 
-      ENDDO
+      OC = 0
+      OCC= 0
 
+!!DETERMINE THE OCCUPANCY OF EACH SITE
+
+!$OMP PARALLEL PRIVATE(RS,RX,RY,RZ,RMIN,MIN,J,N,ATOM) SHARED(OC,OCC)
+!$OMP DO
+      DO I = 1, NATOMC
+
+        RS=0;RMIN=HUGE(RMIN);MIN=0
+        DO J = 1, NATOMR
+          RX = PBC_DEFECT(RA(1,I) - RR(1,J))
+          RY = PBC_DEFECT(RA(2,I) - RR(2,J))
+          RZ = PBC_DEFECT(RA(3,I) - RR(3,J))
+          RS = RX*RX + RY*RY + RZ*RZ
+          IF (RS .LT. RMIN) THEN
+            MIN = J
+            RMIN = RS
+          END IF
+        END DO
+
+!$OMP CRITICAL
+        OCC(MIN) = OCC(MIN) + 1
+        OC(OCC(MIN),MIN) = I
+!$OMP END CRITICAL
+
+      END DO
+!$OMP END DO
+
+!!USING OCCUPANCY TO DETERMINE DEFECTS
+!$OMP DO
       DO I=1,NATOMR
 
-        IF(TV(I).NE.1) THEN
+        N = OCC(I)
+        IF (N .GT. 0) THEN
+          TV(I) = N
+          DO J=1,N
+            ATOM = OC(J,I)
+            TI(ATOM) = N
+          END DO
+        END IF
 
-          NDVAC = NDVAC + 1
+      END DO
+!$OMP END DO
+!$OMP END PARALLEL
 
-        ENDIF
-
-      ENDDO
-
-      RETURN
-      END SUBROUTINE FIND_DEFECT
+      END SUBROUTINE POLY_CRYSTAL_WS
 !***********************************************************************!
 !!OUTPUT DEFECTS FOR OVITO
 
@@ -243,9 +358,9 @@
       WRITE(29,'(A)') 'ITEM: NUMBER OF ATOMS'
       WRITE(29,*) NDVAC+NDINT
       WRITE(29,'(A)') 'ITEM: BOX BOUNDS PP PP PP'
-      WRITE(29,'(2F10.4,I5)') 0.00,RBOX,3
-      WRITE(29,'(2F10.4,I5)') 0.00,RBOX,3
-      WRITE(29,'(2F10.4,I5)') 0.00,RBOX,3
+      WRITE(29,'(2F10.4,I5)') 0.00,RBOX*EPSX,3
+      WRITE(29,'(2F10.4,I5)') 0.00,RBOX*EPSY,3
+      WRITE(29,'(2F10.4,I5)') 0.00,RBOX*EPSZ,3
       WRITE(29,'(A)') 'ITEM: ATOMS x y z type'
 
       DO I=1,NATOMC
@@ -281,33 +396,30 @@
       WRITE(30,'(A)') 'ITEM: NUMBER OF ATOMS'
       WRITE(30,*) NATOMC
       WRITE(30,'(A)') 'ITEM: BOX BOUNDS PP PP PP'
-      WRITE(30,'(2F10.4,I5)') 0.00,RBOX,3
-      WRITE(30,'(2F10.4,I5)') 0.00,RBOX,3
-      WRITE(30,'(2F10.4,I5)') 0.00,RBOX,3
+      WRITE(30,'(2F10.4,I5)') 0.00,RBOX*EPSX,3
+      WRITE(30,'(2F10.4,I5)') 0.00,RBOX*EPSY,3
+      WRITE(30,'(2F10.4,I5)') 0.00,RBOX*EPSZ,3
       WRITE(30,'(A)') 'ITEM: ATOMS x y z'
 
       DO I = 1, NATOMC
-
         WRITE(30,'(3F14.5)') (RA(J,I), J=1,3)
-
       END DO
 
       CLOSE(30)
 
       END SUBROUTINE OVITO
 !***********************************************************************!
-      SUBROUTINE ELECTRON_DAMAGE(NFRKL)
+      SUBROUTINE BASIC_DAMAGE(NFRKL)
 
-      USE SYSTEM, ONLY: RA,NATOMC,RBOX,RANK,DECUT
-      USE DEFECT, ONLY: IV,II,NDINT,NDVAC
+      USE SYSTEM, ONLY: RA,NATOMC,RANK,DECUT,TDAM
 
       IMPLICIT NONE
 
       INTEGER :: I, J, ID, NFRKL, N
       INTEGER :: MOVEID(NFRKL)
-      REAL *8 :: RX, RY, RZ, RS, PBC, DLIM
+      REAL *8 :: DLIM
       REAL *8 :: RND, NEWPOS(3)
-      LOGICAL :: FLAG
+      LOGICAL :: INSERT
 
       DLIM = DECUT
       
@@ -317,37 +429,88 @@
 
       CALL RANDOM_SEED()
 
-      WRITE(*,'(A,I0,A)') 'Generating ',NFRKL,' Frenkel pairs'
-
       !!PICK NFRKL ATOMS TO MOVE (SHOULD CREATE NFKRL # OF FRENKEL PAIRS)
 
-      DO I = 1, NFRKL
+      IF (RANK .EQ. 0) THEN
 
-        CALL RANDOM_NUMBER(RND)
+        N = 1
 
-        ID = CEILING(RND*NATOMC)
+        DO WHILE (N .LE. NFRKL)
 
-        IF (ID .EQ. 0) ID = 1
+          CALL RANDOM_NUMBER(RND)
+          ID = CEILING(RND*NATOMC)
+          IF (ID .EQ. 0) ID = 1
 
-        MOVEID(I) = ID
+          INSERT = .TRUE.
+          DO J = 1,N-1
+            IF (ID .EQ. MOVEID(J)) INSERT = .FALSE.
+          END DO
+          IF (INSERT) THEN
+            MOVEID(N) = ID
+            N = N + 1
+          END IF
 
-      END DO
+        END DO
+
+      END IF
 
       !!MOVE CHOSEN ATOMS TO RANDOM LOCATIONS
 
+      IF (TDAM .EQ. 2) THEN
+
+        IF (RANK .EQ. 0) THEN
+        
+          WRITE(*,'(A,I0,A)') 'Generating ',NFRKL,' Frenkel pairs'
+
+          DO I = 1, NFRKL
+
+            CALL FRENKEL_POS_UPDATE(NEWPOS,DLIM)
+            RA(:,MOVEID(I)) = NEWPOS
+
+          END DO
+
+        END IF
+
+      ELSE IF (TDAM .EQ. 3) THEN
+
+        IF (RANK .EQ.0) WRITE(*,'(A,I0,A)') 'Generating ',NFRKL,' single vacancies'
+
+        CALL CREATE_VACANCIES(NFRKL, MOVEID)
+        
+      END IF
+
+      END SUBROUTINE BASIC_DAMAGE
+!***********************************************************************!
+      SUBROUTINE CREATE_VACANCIES(NFRKL,IDS)
+
+      USE SYSTEM
+      USE LMP_DRIVER
+      USE MPI
+
+      IMPLICIT NONE
+
+      INTEGER :: I,NFRKL
+      INTEGER :: IDS(NFRKL)
+      CHARACTER(LEN=10) :: IDSTR
+
+      CALL MPI_BCAST(IDS, NFRKL, MPI_INT, 0, MPI_COMM_WORLD, IERR)
+      
+      !Update lammps on what atoms were deleted
       DO I = 1, NFRKL
-
-        CALL FRENKEL_POS_UPDATE(NEWPOS,DLIM)
-
-        RA(:,MOVEID(I)) = NEWPOS
-
+        WRITE(IDSTR,'(I0)') IDS(I)
+        CALL lammps_command(lmp, 'group deleteList id '//TRIM(IDSTR))
       END DO
+      CALL lammps_command(lmp, 'delete_atoms group deleteList')
 
-      END SUBROUTINE ELECTRON_DAMAGE
+      !Upadate all other processes on changed parameters
+      NATOMC = int(lammps_get_natoms(lmp))
+      CALL RECV_LMP_POS
+
+      END SUBROUTINE CREATE_VACANCIES
 !***********************************************************************!
       SUBROUTINE FRENKEL_POS_UPDATE(POS,THRESH)
 
-      USE SYSTEM, ONLY: RA, NATOMC, RBOX
+      USE SYSTEM, ONLY: RA, NATOMC, RBOX, EPSX, EPSY, EPSZ
 
       IMPLICIT NONE
 
@@ -362,7 +525,9 @@
 
       CALL RANDOM_NUMBER(POS)
 
-      POS = POS * RBOX
+      POS(1) = POS(1)*RBOX*EPSX
+      POS(2) = POS(2)*RBOX*EPSY
+      POS(3) = POS(3)*RBOX*EPSZ 
 
       !!FIND CLOSEST ATOM TO (X,Y,Z)
 
@@ -418,8 +583,7 @@
 !***********************************************************************!
       SUBROUTINE MD_DPA
 
-      USE SYSTEM, ONLY: NATOMC, DPA, AVDPA, DPAC, DTIME, DRATE, TDAM,
-     #  CALC
+      USE SYSTEM, ONLY: NATOMC, DPA, AVDPA, DPAC, DTIME, DRATE, TDAM,CALC
       USE DEFECT, ONLY: ONDSTOT, NDSTOT
 
       IMPLICIT NONE
@@ -437,6 +601,7 @@
       !UPDATE TIME BETWEEN CASCADES
 
       DTIME = AVDPA / DRATE
+      IF (TDAM .EQ. 3) DTIME = HUGE(DTIME)
 
       !ADD AVERAGE DPA PER CASCADE TO CURRENT DPA VALUE
 
@@ -492,6 +657,9 @@
         WRITE(27,*) DPAC
         WRITE(27,*) AVDPA
         WRITE(27,*) ONDSTOT
+        WRITE(27,*) EPSX
+        WRITE(27,*) EPSY
+        WRITE(27,*) EPSZ
 
         !AVERAGE DEFECT MIGRATION ENERGIES
 

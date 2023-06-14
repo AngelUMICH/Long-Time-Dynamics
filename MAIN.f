@@ -25,7 +25,6 @@
       CALL LMP_INIT
       CALL SYS_INPUT
       CALL SYS_INIT
-      CALL LMP_DIMER_INIT
 
       IF(TJOB.EQ.1) THEN
 

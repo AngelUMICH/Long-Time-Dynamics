@@ -265,7 +265,7 @@
 
 !!MAMIMUM TRANSLATION STEP:USER DEFINE
 
-      THIS%NTSMAX = 500
+      THIS%NTSMAX = NDSMAX
 
 !!RATIO:USED DEFINE (1.0DO MEANS NO EFFECTS)
 
@@ -307,11 +307,11 @@
 
       DO I = 1,NATOMC
 
-        RX = PBC(IX-RA(1,I))
+        RX = PBC(IX-RA(1,I),1)
 
-        RY = PBC(IY-RA(2,I))
+        RY = PBC(IY-RA(2,I),2)
 
-        RZ = PBC(IZ-RA(3,I))
+        RZ = PBC(IZ-RA(3,I),3)
 
         RS = RX*RX+RY*RY+RZ*RZ
 
@@ -395,11 +395,11 @@
 
       DO I = 1,NATOMC
 
-        RX = PBC(IX-RA(1,I))
+        RX = PBC(IX-RA(1,I),1)
 
-        RY = PBC(IY-RA(2,I))
+        RY = PBC(IY-RA(2,I),2)
 
-        RZ = PBC(IZ-RA(3,I))
+        RZ = PBC(IZ-RA(3,I),3)
 
         RS = RX*RX + RY*RY + RZ*RZ
 
@@ -423,11 +423,11 @@
 
       DO I = 1,NATOMC
 
-        RX = PBC(IX-RA(1,I))
+        RX = PBC(IX-RA(1,I),1)
 
-        RY = PBC(IY-RA(2,I))
+        RY = PBC(IY-RA(2,I),2)
 
-        RZ = PBC(IZ-RA(3,I))
+        RZ = PBC(IZ-RA(3,I),3)
 
         RS = RX*RX + RY*RY + RZ*RZ
 
@@ -451,11 +451,11 @@
 
       DO I = 1,NATOMC
 
-        RX = PBC(IX-RA(1,I))
+        RX = PBC(IX-RA(1,I),1)
 
-        RY = PBC(IY-RA(2,I))
+        RY = PBC(IY-RA(2,I),2)
 
-        RZ = PBC(IZ-RA(3,I))
+        RZ = PBC(IZ-RA(3,I),3)
 
         RS = RX*RX + RY*RY + RZ*RZ
 
@@ -535,11 +535,10 @@
 
       WRITE(S_NATOM1,'(1I0)') THIS%NATOM1
 
-      CALL LAMMPS_COMMAND(lmpDimer, 'group saddle id 1:'
-     #                    //TRIM(S_NATOM1))
+      CALL LAMMPS_COMMAND(lmpDimer, 'group saddle id 1:'//TRIM(S_NATOM1))
       
-      CALL LAMMPS_COMMAND(lmpDimer, 
-     #                    'compute pesum saddle reduce sum c_peratom')
+      CALL LAMMPS_COMMAND(lmpDimer, 'compute pesum saddle reduce sum c_peratom')
+      
 
       RETURN
 

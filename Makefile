@@ -5,13 +5,13 @@ LMPCWRAP = ./LAMMPS-wrapper.o
 LMPFLIB = ./LAMMPS.o
 
 OBJS = LAMMPS.o LAMMPS-wrapper.o DEFINE.o LMP.o INIT.o FUNCT.o DIMER.o MAIN.o AKMC.o
-FLAGS = -O3 -g -fopenmp -std=legacy
+FLAGS = -O2 -g -fopenmp -std=legacy -ffixed-line-length-132 #-Wall -fcheck=all
 LIBS = -lgomp -lstdc++ -lm -ldl -ljpeg -lpng
 
 opld: $(OBJS)
 	mpifort $(FLAGS) -o  $@  $^ $(LMPLIB) $(LIBS)
-	@if [ ! -d Obj_files ]; then mkdir Obj_files; fi
-	@mv *.o *.mod Obj_files
+	#@if [ ! -d Obj_files ]; then mkdir Obj_files; fi
+	#@mv *.o *.mod Obj_files
 	
 $(LMPCWRAP): LAMMPS-wrapper.cpp
 	mpicxx -c -I $(LMPSRC) $< -o $@
