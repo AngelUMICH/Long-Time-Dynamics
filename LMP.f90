@@ -9,14 +9,17 @@ module LMP_DRIVER
   !lmpDimer: LAMMPS object for dimer searches
   type (C_ptr) :: lmp
   type (C_ptr) :: lmpDimer
-  !pe:  potential energy
-  real (C_double), pointer :: pe => NULL()
   !lmpTemp: current measurement of system temperature
   real (C_double), pointer :: lmpTemp => NULL()
   !lmpEnergy: current measurement of system energy
   real (C_double), pointer :: lmpEnergy => NULL()
   !lmpPressure: current measurement of system pressure tensor
   real (C_double), dimension(:), pointer ::lmpPressure => NULL()
+  !lmpL*: length of the system in the respective dimensions
+  real*8, dimension(3) :: lmpBoxLo = 0, lmpBoxHi = 0
+  real*8 :: xy=0,yz=0,xz=0
+  logical, dimension(3) :: periodicity=0
+  logical :: box_change=0
 
 !***********************************************************************!
 contains
@@ -40,13 +43,19 @@ contains
     call lammps_command(lmp, 'atom_style atomic')
     call lammps_command(lmp, 'atom_modify map array')
 
-    !Read from input file using LAMMPS
-    call lammps_file(lmp, 'in.lammps')
-    call lammps_command(lmp, 'thermo_style custom step temp epair etotal pe press pxx pyy pzz')
+    write(str,'(f7.5)') rlat
+    if (rank ==0) print *, 'lattice bcc '//trim(str)
+    call lammps_command(lmp, 'lattice bcc '//trim(str))
 
-    !Needed for creating the right stress profiles
-    write(str,'(A,F12.4,A,F12.4,A,F12.4)') ' x ', -SIGX, ' y ', -SIGY, ' z ', -SIGZ
-    call lammps_command(lmp, 'fix stress all box/relax'//trim(str))
+    write(str,'(f3.1,x,f8.5,x,f3.1,x,f8.5,x,f3.1,x,f8.5)') 0.0,rbox,0.0,rbox,0.0,rbox
+    if (rank ==0) print *, 'region box block '//trim(str)//' units lattice'
+    call lammps_command(lmp, 'region box block '//trim(str)//' units lattice')
+    call lammps_command(lmp, 'create_box 1 box')
+    
+    !Read from input file using LAMMPS
+    if (rank ==0) print *, "Reading in initial positions"
+    call lammps_file(lmp, 'in.lammps')
+    call lammps_command(lmp, 'thermo_style custom step pe lx ly lz xlo ylo zlo pxx pyy pzz')
 
     !Including necessary computes for OPLD
     call lammps_command(lmp, 'compute TotEn all pe')
@@ -58,6 +67,7 @@ contains
     !Extracting MD values for cascade
     call lammps_extract_compute (lmpTemp, lmp, 'thermo_temp', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
     call lammps_extract_compute (lmpEnergy, lmp, 'thermo_pe', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
+    call lammps_extract_compute (lmpPressure, lmp, 'thermo_press', LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR)
 
     !!SETTING UP COMMS FOR DIMER LAMMPS OBJECTS
     CALL MPI_COMM_SPLIT(MPI_COMM_WORLD,RANK,RANK,DIMER_COMM,IERR)
@@ -73,6 +83,8 @@ contains
 
     implicit none
 
+    character (len=200) :: str
+
     !attaches lammps object to pointer variable lmp
     call lammps_open('lmp -log none -screen none', DIMER_COMM, lmpDimer)
 
@@ -81,6 +93,13 @@ contains
     call lammps_command(lmpDimer, 'boundary p p p')
     call lammps_command(lmpDimer, 'atom_style atomic')
     call lammps_command(lmpDimer, 'atom_modify map array')
+
+    write(str,'(f7.5)') rlat
+    call lammps_command(lmpDimer, 'lattice bcc '//trim(str))
+
+    write(str,'(f3.1,x,f8.5,x,f3.1,x,f8.5,x,f3.1,x,f8.5)') 0.0,rbox,0.0,rbox,0.0,rbox
+    call lammps_command(lmpDimer, 'region box block '//trim(str)//' units lattice')
+    call lammps_command(lmpDimer, 'create_box 1 box')
 
     !Read from input file using LAMMPS
     call lammps_file(lmpDimer, 'in.lammps')
@@ -102,29 +121,28 @@ contains
 
   integer :: i,j
 
-  IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-    if (rank == 0) write(*,'(A)') 'Relaxing System'
-  ENDIF
+  IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Relaxing System'
 
   !Minimize/relax the system with stress profile considerations
   call lammps_command(lmp, 'min_style cg')
-  call lammps_command(lmp, 'minimize 1.0e-10 1.0e-10 100 1000')
+  call lammps_command(lmp, 'minimize 1.0e-10 1.0e-10 5000 50000')
 
-  call LMP_ENERGY
-  call LMP_PRESSURE
+  ENCALC = lmpEnergy
+  !reversed sign; positive is tension
+  PRESS = -lmpPressure
 
-  IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-    if (rank == 0) write(*,'(A)') 'Finished Relaxation'
-  ENDIF
+  IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Finished Relaxation'
   
   !When ONLY relaxing system
   if (TJOB.EQ.1) then
 
-    !output relaxed system to std_kopt.out
+    !output relaxed system
     if (RANK == 0) then
 
       write(*,'(A,F16.5)') 'Total System Energy = ', ENCALC
 
+      !!CONTAINS THE OPT STRUCTURE AFTER RELAXATION
+      open(unit=26,file='std_kopt.out')
       write(26,'(I0)') NATOMC
       do i = 1, NATOMC
         write(26,'(I0, 3F14.5)') I, (RA(j,i), j=1,3)
@@ -135,80 +153,62 @@ contains
 
   end subroutine LMP_RELAX
 !***********************************************************************!
-  subroutine LMP_ENERGY
+  subroutine LMP_DOSE_RELAX
 
-  use SYSTEM, only: ENCALC, RANK
+  use system
 
   implicit none
-
-  !OENCALC: Old system energy
-  real*8 :: OENCALC
-
-  OENCALC = ENCALC
-
-  !Might not need to extract pe everytime. It is already bound
-  call lammps_extract_compute (pe, lmp, 'TotEn', &
-                                LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
-  if ( .not. associated (pe) .and. RANK == 0) write(*,*) 'pe is not associated'
-  ENCALC = pe
-
-  if (OENCALC == ENCALC .and. RANK == 0) write(*,*) 'Warning: sys energy might not be updated'
   
-  end subroutine LMP_ENERGY
-!***********************************************************************!
-  subroutine LMP_PRESSURE
-
-  use SYSTEM
-
-  implicit none
-
-  !OENCALC: Old system energy
   integer :: i
-  real*8, dimension(6) :: OLDPRESS
-  double precision, dimension(3):: boxlo, boxhi
-  double precision:: xy, yz, xz
-  logical :: periodicity(3), box_change
   character (len=200) :: str
 
-  OLDPRESS = PRESS
+  IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Relaxing System'
 
-  !Might not need to extract pe everytime. It is already bound
-  call lammps_extract_compute (lmpPressure, lmp, 'TotPress', &
-                                LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR)
-  if ( .not. associated (lmpPressure) .and. RANK == 0) write(*,*) 'lmpPressure is not associated'
+  write(str,'(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
+  if (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) print *, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
+  call lammps_command(lmp, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
+
+  !Minimize/relax the system with stress profile considerations
+  call lammps_command(lmp, 'min_style cg')
+  call lammps_command(lmp, 'minimize 1.0e-10 1.0e-10 5000 50000')
+
+  call lammps_command(lmp, 'unfix f_boxrelax')
+
+  ENCALC = lmpEnergy
+  !reversed sign; positive is tension
   PRESS = -lmpPressure
 
-  if (all(OLDPRESS == PRESS) .and. RANK == 0) write(*,*) 'Warning: sys pressure might not be updated'
+  IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Finished Relaxation'
 
-  !UNDO SCALING BEFORE NEW SCALING IS DONE
+  ! Update the reference lattice
+
+  ! Divide by old strain to get original values
   DO I=1, NATOMR
     RR(1,I) = RR(1,I)/EPSX
     RR(2,I) = RR(2,I)/EPSY
     RR(3,I) = RR(3,I)/EPSZ
   END DO
 
-  !Change box dim to stress profile
-  call lammps_extract_box(lmp, boxlo, boxhi, xy, yz, xz, periodicity, box_change)
-  EPSX = (boxhi(1)-boxlo(1))/RLAT/RBOX
-  EPSY = (boxhi(2)-boxlo(2))/RLAT/RBOX
-  EPSZ = (boxhi(3)-boxlo(3))/RLAT/RBOX
+  call lammps_extract_box(lmp, lmpBoxLo, lmpBoxHi,xy,yz,xz,periodicity,box_change)
 
-  PRINT *, EPSX, EPSY, EPSZ
+  EPSX = (lmpBoxHi(1)-lmpBoxLo(1)) / (rbox*rlat)  
+  EPSY = (lmpBoxHi(2)-lmpBoxLo(2)) / (rbox*rlat)  
+  EPSZ = (lmpBoxHi(3)-lmpBoxLo(3)) / (rbox*rlat)  
 
-  !Change the simualtion dimensions with corresponding strain
-  write(str,'(A,F10.6,A,F10.6,A,F10.6)') ' x final 0 ',RBOX*EPSX,' y final 0 ',RBOX*EPSY,' z final 0 ',RBOX*EPSZ
-  call lammps_command(lmp, 'change_box all'//trim(str)//' remap units lattice')
-  call lammps_command(lmpDimer, 'change_box all'//trim(str)//' remap units lattice')
-
-  !UPDATE THE REFERENCE LATTICE BY NEW SCALING
+  !update with new strain
   DO I=1, NATOMR
     RR(1,I) = RR(1,I)*EPSX
     RR(2,I) = RR(2,I)*EPSY
     RR(3,I) = RR(3,I)*EPSZ
   END DO
-  
-  end subroutine LMP_PRESSURE
+
+  ! print *, rbox, EPSX, EPSY, EPSZ  
+  write(str,'(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ',RBOX*EPSX,' y final 0 ',RBOX*EPSY,' z final 0 ',RBOX*EPSZ
+  call lammps_command(lmpDimer, 'change_box all '//trim(str)//' units lattice')
+
+  end subroutine LMP_DOSE_RELAX
 !***********************************************************************!
+
   subroutine LMP_CASCADE
 
   use MPI

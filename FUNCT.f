@@ -74,7 +74,6 @@
       SUBROUTINE FIND_DEFECT
 
       USE SYSTEM
-
       USE DEFECT
 
       IMPLICIT NONE
@@ -82,19 +81,9 @@
       INTEGER I
 
       NDINT = 0
-
       NDVAC = 0
-
       TI = 0
-
       TV = 0
-
-!!SCALE DOWN POSITIONS TO CUBE
-      DO I=1,NATOMC
-        RA(1,I) = RA(1,I)/EPSX
-        RA(2,I) = RA(2,I)/EPSY
-        RA(3,I) = RA(3,I)/EPSZ
-      END DO
 
       IF (TCRY .EQ. 1) THEN
         CALL SINGLE_CRYSTAL_WS
@@ -105,31 +94,12 @@
 !!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
 
       DO I=1,NATOMC
-
-        IF(TI(I).NE.1) THEN
-
-          NDINT = NDINT + 1
-
-        ENDIF
-
+        IF(TI(I).NE.1) NDINT = NDINT + 1
       ENDDO
 
       DO I=1,NATOMR
-
-        IF(TV(I).NE.1) THEN
-
-          NDVAC = NDVAC + 1
-
-        ENDIF
-
+        IF(TV(I).NE.1) NDVAC = NDVAC + 1
       ENDDO
-
-!!RESCALE ATOM POSITIONS TO ORIGINAL VALUES
-      DO I=1,NATOMC
-        RA(1,I) = RA(1,I)*EPSX
-        RA(2,I) = RA(2,I)*EPSY
-        RA(3,I) = RA(3,I)*EPSZ
-      END DO
 
       RETURN
       END SUBROUTINE FIND_DEFECT
@@ -149,6 +119,13 @@
       INTEGER IX,IY,IZ,JX,JY,JZ,RX1,RY1,RZ1,RX2,RY2,RZ2
 
       NBOX = INT(RBOX)*2
+
+      !!SCALE DOWN POSITIONS TO CUBE
+      DO I=1,NATOMC
+        RA(1,I) = RA(1,I)/EPSX
+        RA(2,I) = RA(2,I)/EPSY
+        RA(3,I) = RA(3,I)/EPSZ
+      END DO
 
       DO I=1,NATOMC
 
@@ -272,6 +249,13 @@
 
       ENDDO
 
+      !!RESCALE ATOM POSITIONS TO ORIGINAL VALUES
+      DO I=1,NATOMC
+        RA(1,I) = RA(1,I)*EPSX
+        RA(2,I) = RA(2,I)*EPSY
+        RA(3,I) = RA(3,I)*EPSZ
+      END DO
+
       END SUBROUTINE SINGLE_CRYSTAL_WS
 !***********************************************************************!
       SUBROUTINE POLY_CRYSTAL_WS
@@ -279,29 +263,43 @@
       USE OMP_LIB
       USE SYSTEM
       USE DEFECT
+      USE MPI
 
       IMPLICIT NONE
 
-      REAL*8 RX,RY,RZ,RS,RMIN,PBC_DEFECT
+      REAL*8 RX,RY,RZ,RS,RMIN,PBC
       INTEGER I,J,MIN,N,ATOM
+      INTEGER IDHI, IDLO, RID
+      INTEGER OCCBUFF(SIZE(OCC))
+
+      IDLO = NATOMC/NPROCS*(RANK)+1
+      IDHI = NATOMC/NPROCS*(RANK+1)
+      IF (RANK == NPROCS-1) IDHI = IDHI + MOD(NATOMC, NPROCS)
+
+      CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
+      CALL MPI_BCAST(UPNEIGH,1,MPI_LOGICAL,0,MPI_COMM_WORLD,IERR)
+
+      IF (MOD(ISTEP-1,50).EQ.0 .and. UPNEIGH) CALL DEFECT_NEIGH_UPDATE(IDLO,IDHI)
 
       OC = 0
       OCC= 0
+      OCCBUFF= 0
 
 !!DETERMINE THE OCCUPANCY OF EACH SITE
 
 !$OMP PARALLEL PRIVATE(RS,RX,RY,RZ,RMIN,MIN,J,N,ATOM) SHARED(OC,OCC)
 !$OMP DO
-      DO I = 1, NATOMC
+      DO I = IDLO, IDHI
 
         RS=0;RMIN=HUGE(RMIN);MIN=0
-        DO J = 1, NATOMR
-          RX = PBC_DEFECT(RA(1,I) - RR(1,J))
-          RY = PBC_DEFECT(RA(2,I) - RR(2,J))
-          RZ = PBC_DEFECT(RA(3,I) - RR(3,J))
+        DO J = 1, NNEIGH
+          RID = RNEIGH(J,I)
+          RX = PBC(RA(1,I) - RR(1,RID),1)
+          RY = PBC(RA(2,I) - RR(2,RID),2)
+          RZ = PBC(RA(3,I) - RR(3,RID),3)
           RS = RX*RX + RY*RY + RZ*RZ
           IF (RS .LT. RMIN) THEN
-            MIN = J
+            MIN = RID
             RMIN = RS
           END IF
         END DO
@@ -313,6 +311,10 @@
 
       END DO
 !$OMP END DO
+      
+!$OMP SINGLE
+      CALL MPI_ALLREDUCE(OCC,OCCBUFF,SIZE(OCC),MPI_INT,MPI_SUM,MPI_COMM_WORLD,IERR)
+!$OMP END SINGLE
 
 !!USING OCCUPANCY TO DETERMINE DEFECTS
 !$OMP DO
@@ -323,7 +325,7 @@
           TV(I) = N
           DO J=1,N
             ATOM = OC(J,I)
-            TI(ATOM) = N
+            TI(ATOM) = OCCBUFF(I)
           END DO
         END IF
 
@@ -331,7 +333,93 @@
 !$OMP END DO
 !$OMP END PARALLEL
 
+      CALL MPI_REDUCE(TV, TVBUFF, SIZE(TV), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
+      CALL MPI_REDUCE(TI, TIBUFF, SIZE(TI), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
+
+      IF (RANK == 0) THEN
+        TV = TVBUFF
+        TI = TIBUFF
+      END IF
+
       END SUBROUTINE POLY_CRYSTAL_WS
+!***********************************************************************!
+      SUBROUTINE DEFECT_NEIGH_UPDATE(LO,HI)
+
+      USE SYSTEM
+      USE DEFECT
+
+      IMPLICIT NONE
+
+      INTERFACE
+        SUBROUTINE Bubble_Sort(A,B)
+          REAL*8, INTENT(in out), DIMENSION(:) :: a
+          INTEGER, INTENT(in out), DIMENSION(:) :: b
+        END SUBROUTINE Bubble_Sort
+      END INTERFACE
+
+      !LO & HI ARE THE IDS FOR WHICH NEIGH LIST WILL BE UPDATED FOR
+      INTEGER :: LO, HI
+      INTEGER :: I,J,K
+      REAL*8 :: RX,RY,RZ,RS,PBC
+      REAL*8 START, FINISH
+      REAL*8 :: RSLIST(NNEIGH)
+
+      if (rank==0) print *, 'Updating defect neighbor lists'
+
+      UPNEIGH = .FALSE.
+
+      CALL CPU_TIME(START)
+
+      RX=0;RY=0;RZ=0; RS=0
+      RSLIST=0; RNEIGH=0
+
+      !FOR EACH ATOM IN THE SYSTEM FIND N NEAREST REFERENCE ATOMS
+      DO I=LO,HI
+        RSLIST = HUGE(RS)
+        DO J=1,NATOMR
+          RX = PBC(RA(1,I) - RR(1,J),1)
+          RY = PBC(RA(2,I) - RR(2,J),2)
+          RZ = PBC(RA(3,I) - RR(3,J),3)
+          RS = RX*RX + RY*RY + RZ*RZ
+          IF (RS < RSLIST(NNEIGH)) THEN
+            RSLIST(NNEIGH) = RS
+            RNEIGH(NNEIGH,I) = J
+            CALL Bubble_Sort(RSLIST,RNEIGH(:,I))
+          ELSE
+          END IF
+        END DO
+      END DO
+
+      CALL CPU_TIME(FINISH)
+      IF (RANK == NPROCS-1) WRITE(*,'(a,f14.5,a)') 'Neighbor list update time= ',FINISH-START,' s'
+
+      END SUBROUTINE DEFECT_NEIGH_UPDATE
+!***********************************************************************!
+      SUBROUTINE Bubble_Sort(a,b)
+      REAL*8, INTENT(in out), DIMENSION(:) :: a
+      INTEGER, INTENT(in out), DIMENSION(:) :: b
+      REAL*8 :: temp
+      INTEGER :: temp2
+      INTEGER :: i, j
+      LOGICAL :: swapped
+    
+      DO j = SIZE(a)-1, 1, -1
+        swapped = .FALSE.
+        DO i = 1, j
+          IF (a(i) > a(i+1)) THEN
+            temp = a(i)
+            a(i) = a(i+1)
+            a(i+1) = temp
+
+            temp2 = b(i)
+            b(i) = b(i+1)
+            b(i+1) = temp2
+            swapped = .TRUE.
+          END IF
+        END DO
+        IF (.NOT. swapped) EXIT
+      END DO
+      END SUBROUTINE Bubble_Sort
 !***********************************************************************!
 !!OUTPUT DEFECTS FOR OVITO
 
@@ -583,7 +671,7 @@
 !***********************************************************************!
       SUBROUTINE MD_DPA
 
-      USE SYSTEM, ONLY: NATOMC, DPA, AVDPA, DPAC, DTIME, DRATE, TDAM,CALC
+      USE SYSTEM, ONLY: NATOMC, DPA, AVDPA, DPAC, DTIME, DRATE, TDAM,CALC, NFREKL
       USE DEFECT, ONLY: ONDSTOT, NDSTOT
 
       IMPLICIT NONE
@@ -600,12 +688,19 @@
 
       !UPDATE TIME BETWEEN CASCADES
 
-      DTIME = AVDPA / DRATE
-      IF (TDAM .EQ. 3) DTIME = HUGE(DTIME)
+      IF (TDAM .EQ. 1) THEN
+        DTIME = AVDPA / DRATE
+        DPA = DPA + NEWDSP/NATOMC
+      ELSE IF (TDAM .EQ. 2) THEN
+        DTIME = (NFREKL/NATOMC)/DRATE
+        DPA = DPA + (NFREKL/NATOMC)
+      ELSE IF (TDAM .EQ. 3) THEN
+        DTIME = HUGE(DTIME)
+        DPA = 0
+      END IF
 
       !ADD AVERAGE DPA PER CASCADE TO CURRENT DPA VALUE
 
-      DPA = DPA + NEWDSP/NATOMC
 
       CALC = .FALSE.
 
@@ -647,7 +742,7 @@
         WRITE(27,*)
 
         WRITE(27,*) 
-     #    'ISTEP, TIME, TIME_LAST, DTIME, DPA, DPAC, AVDPA, ONDSTOT'
+     #    'ISTEP, TIME, TIME_LAST, DTIME, DPA, DPAC, AVDPA, ONDSTOT, EPSX, EPSY, EPSZ'
 
         WRITE(27,*) ISTEP
         WRITE(27,*) TIME

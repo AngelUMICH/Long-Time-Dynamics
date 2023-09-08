@@ -18,6 +18,7 @@
       USE LMP_DRIVER
 
       USE SYSTEM,ONLY:BSTEP,NTSTEP,ISTEP,RANK,NATOMC,RA,SKIP
+      USE DEFECT,ONLY:UPNEIGH
 
       IMPLICIT NONE
 
@@ -27,41 +28,21 @@
 
         CALL DOSE
 
+        IF (MOD(ISTEP-1,50).EQ.0) UPNEIGH = .TRUE.
+        CALL FIND_DEFECT
+
         IF (RANK .EQ. 0) THEN
-
           CALL DCIDNT
-
           CALL DFSEL
-
           CALL CBC
-
         END IF    
 
         CALL SPS
-
         CALL KMC
-
-        IF (.NOT. SKIP) THEN
-      
-          CALL OPT         
-      
-        ENDIF
-
+        IF (.NOT. SKIP) CALL OPT
         CALL RESTART
 
       ENDDO
-
-      IF (RANK .EQ. 0) THEN
-
-        WRITE(26,*) NATOMC
-
-        DO I = 1, NATOMC
-          WRITE(26,'(3F14.5)') (RA(J,I), J=1,3)
-        ENDDO
-
-      ENDIF
-
-      RETURN
 
       END SUBROUTINE
 !***********************************************************************!
@@ -232,7 +213,7 @@
           ENDDO
 
           IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-          WRITE(*,'(A,1I12,F17.8)') 'SPS',J,EM(J)
+            WRITE(*,'(A,1I12,F14.5)') 'SPS',J,EM(J)
           ENDIF
 
           CALL DIMER_FINISH(ADIMER)
@@ -280,10 +261,6 @@
       INTEGER I,J,NSTMP
 
       IF (RANK.EQ.0) THEN
-
-        !NEED TO WRITE INITIAL ENERGY BEFORE RECALCULATION
-
-        WRITE(25,'(I3.3,F14.5)',ADVANCE='NO') ISTEP,ENCALC
             
         !THE TOTAL NUMBER OF THE ATOMS INSIDE THE CHOSEN AV
 
@@ -305,7 +282,7 @@
 
       CALL SEND_OPLD_POS
 
-      CALL LMP_RELAX
+      CALL LMP_DOSE_RELAX
 
       CALL RECV_LMP_POS
 
@@ -316,28 +293,20 @@
         !ENCALC:THE SYSTEM ENERGY AFTER OPT,TIME:CURRENT TIME
 
         IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-        WRITE(*,'(3X, 2A12, 10A14)') 'STEP','DIMER ID','BARRIER',
-     #    'SYS ENERGY', 'TIME', 'P_X', 'P_Y', 'P_Z', 'EPSX', 'EPSY', 'EPSZ', 'DPA'
+        WRITE(*,'(3X, 2A12, 7A14)') 'STEP','DIMER ID','BARRIER',
+     #    'SYS ENERGY', 'TIME', 'Px', 'Py', 'Pz', 'DPA'
 
-        WRITE(*,'(A,2I12,2F14.5,4E14.5,3F14.7,E14.5)') 'ITR',ISTEP,EID,EM(EID),
-     #    ENCALC,TIME,PRESS(1),PRESS(2),PRESS(3),EPSX,EPSY,EPSZ,DPA
+        WRITE(*,'(A,2I12,2F14.5,4E14.5,E14.5)') 'ITR',ISTEP,EID,EM(EID),
+     #    ENCALC,TIME,PRESS(1),PRESS(2),PRESS(3),DPA
         ENDIF
 
-        !THIS IS FOR WRITING SADDLE AND FINAL ENERGY AFTER INITIAL ENERGY
-     
-        WRITE(25, '(2F14.5)') EM(EID), ENCALC
-
+      END IF
+      
         !OUTPUT DEFECTS FOR OVITO
 
         CALL FIND_DEFECT
 
-        IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-
-          CALL OVITO
-
-        ENDIF
-
-      END IF
+        IF (MOD(ISTEP,NFREQ) .EQ. 0 .AND. RANK .EQ. 0) CALL OVITO
 
       RETURN
 
@@ -369,10 +338,6 @@
       OPEN(13,file='defecttemp.dat',status='replace')
 
       PTEMP = 0.0D0
-
-!OUTPUT THE DEFECT STRUCTURE TO ATOMTV AND OVITO
-
-      CALL FIND_DEFECT
 
 !OUTPUT INITIAL DEFECTS WITH FILE INDEX 000
       IF (ISTEP .EQ. 1)THEN
@@ -455,7 +420,7 @@
 
       ENDDO
 
-      print *, ndtot, NDVAC, NDINT
+      !print *, ndtot, NDVAC, NDINT
 
       allocate(Neighbor(1:NDTOT))
       allocate(NNeighbor(1:NDTOT,1:NDTOT))
@@ -515,10 +480,6 @@
         ENDIF
        ENDDO
 
-       IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-       write(6,"(a35,i8)")"cluster :: 1_vac :: numbers=",nvac1
-       ENDIF
-
        DO i=1,NDTOT
         IF(Neighbor(i)==1)THEN
          if(PX(6,i)<0.0)then
@@ -526,9 +487,6 @@
          endif
         ENDIF
        ENDDO
-       IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-       write(6,"(a35,i8)")"cluster :: 1_int :: numbers=",nint1
-       ENDIF
 
        DO i=1,NDTOT
         IF(Neighbor(i)==1)THEN
@@ -814,16 +772,21 @@
       NTEMP = 0
       PTEMP = 0.0D0
 
+      nvac1 = 0
+      nint1 = 0
+
       DO I=1,NDTOT
 
         IF((PX(5,I).NE.0.0D0).AND.(PX(6,I).NE.0.0D0)) THEN
 
-        NTEMP = NTEMP + 1
+          NTEMP = NTEMP + 1
 
-        PX(4,I) = 3.334 + 0.866*abs(PX(6,I))**(1./3.)
+          PX(4,I) = 3.334 + 0.866*abs(PX(6,I))**(1./3.)
 
-        PTEMP(:,NTEMP) = PX(:,I)
-
+          PTEMP(:,NTEMP) = PX(:,I)
+          
+          IF(PX(6,I).EQ.-1) nvac1 = nvac1 + 1
+          IF(PX(6,I).EQ.1) nint1 = nint1 + 1
         ENDIF
 
       ENDDO
@@ -832,6 +795,8 @@
 
       PX = 0.0D0
 
+      IF (MOD(ISTEP,NFREQ) .EQ. 0) write(6,"(a35,i8)")"cluster :: 1_vac :: numbers=",nvac1
+      IF (MOD(ISTEP,NFREQ) .EQ. 0)write(6,"(a35,i8)")"cluster :: 1_int :: numbers=",nint1
 !RESORTING,PX STORES THE POSITIONS OF THE ACTIVE VOLUMES
 
       NDSTOT = 0
@@ -842,10 +807,8 @@
         PX(:,I) = PTEMP(:,I)
 
         IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-        WRITE(*,'(A,I12,6(F14.5),I12)') 'DCIDNT',I,PX(1:6,I),
-     #    INT(PX(7,I))
+          WRITE(*,'(A,I12,5(F14.5))') 'DCIDNT',I,PX(1:4,I),PX(6,I)
         ENDIF
-
         IF (PX(6,I) .GT. 0) sumInt = sumInt + int(abs(PX(6,I)))
         IF (PX(6,I) .LT. 0) sumVac = sumVac + int(abs(PX(6,I)))
 
@@ -886,7 +849,7 @@
 
       IMPLICIT NONE
 
-      REAL*8 PTEMP(7,NDEMAX)
+      REAL*8 PTEMP(7,1)
       REAL*8 rnd,speed,dt,scalef,sump,prop
       integer :: i,j,k,jmapsz,ijump
       REAL*8, allocatable, dimension(:,:) :: pj
@@ -906,6 +869,9 @@
         k=2
        endif
 
+       !if only vacancies then skip ints
+       if (tdam ==3 .and. k==2) cycle
+
        if(j.lt.50) then
         pj(k,i) = 1.0D12*exp(-emig(k,j)/kb/temp)
        else
@@ -919,7 +885,7 @@
       scalef = dt*float(jmapsz)
 
       CALL RANDOM_NUMBER(RND)
-!      write(6,*) rnd
+
       prop = rnd*float(jmapsz)
 
       sump = 0.0
@@ -931,6 +897,8 @@
        else
         k=2
        endif
+
+       if (tdam ==3 .and. k==2) cycle
 
        sump = sump + pj(k,i)*scalef
        if(sump.ge.prop) goto 200
@@ -951,17 +919,13 @@
 
       PX = 0.0D0
 
-!RESORTING,PX STORES THE POSITIONS OF THE ACTIVE VOLUMES
+!PLACE SELECTED DEFECT IN THE FIRST POSITION
 
-      DO I=1,NDTOT
-
-        PX(:,I) = PTEMP(:,I)
+      PX(:,1) = PTEMP(:,1)
 
       IF (MOD(ISTEP,NFREQ) .EQ. 0) THEN
-        WRITE(*,'(A,I12,6(F14.5),I12)') 'DFSEL',I,PX(1:6,I),INT(PX(7,I))
+        WRITE(*,'(A,I12,5(F14.5))') 'DFSEL',1,PX(1:4,1),PX(6,1)
       ENDIF
-
-      ENDDO
 
       deallocate(pj)
 
@@ -1119,7 +1083,7 @@
 
         END IF
 
-        CALL LMP_RELAX
+        CALL LMP_DOSE_RELAX
 
         CALL RECV_LMP_POS
 
