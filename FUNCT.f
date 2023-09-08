@@ -350,13 +350,6 @@
 
       IMPLICIT NONE
 
-      INTERFACE
-        SUBROUTINE Bubble_Sort(A,B)
-          REAL*8, INTENT(in out), DIMENSION(:) :: a
-          INTEGER, INTENT(in out), DIMENSION(:) :: b
-        END SUBROUTINE Bubble_Sort
-      END INTERFACE
-
       !LO & HI ARE THE IDS FOR WHICH NEIGH LIST WILL BE UPDATED FOR
       INTEGER :: LO, HI
       INTEGER :: I,J,K
@@ -384,7 +377,7 @@
           IF (RS < RSLIST(NNEIGH)) THEN
             RSLIST(NNEIGH) = RS
             RNEIGH(NNEIGH,I) = J
-            CALL Bubble_Sort(RSLIST,RNEIGH(:,I))
+            CALL quicksort(RSLIST,RNEIGH(:,I),1,NNEIGH)
           ELSE
           END IF
         END DO
@@ -395,31 +388,32 @@
 
       END SUBROUTINE DEFECT_NEIGH_UPDATE
 !***********************************************************************!
-      SUBROUTINE Bubble_Sort(a,b)
-      REAL*8, INTENT(in out), DIMENSION(:) :: a
-      INTEGER, INTENT(in out), DIMENSION(:) :: b
-      REAL*8 :: temp
-      INTEGER :: temp2
-      INTEGER :: i, j
-      LOGICAL :: swapped
-    
-      DO j = SIZE(a)-1, 1, -1
-        swapped = .FALSE.
-        DO i = 1, j
-          IF (a(i) > a(i+1)) THEN
-            temp = a(i)
-            a(i) = a(i+1)
-            a(i+1) = temp
+      recursive subroutine quicksort(a, b, first, last)
+        implicit none
+        real*8  a(*), x, t
+        integer b(*)
+        integer first, last
+        integer i, j
 
-            temp2 = b(i)
-            b(i) = b(i+1)
-            b(i+1) = temp2
-            swapped = .TRUE.
-          END IF
-        END DO
-        IF (.NOT. swapped) EXIT
-      END DO
-      END SUBROUTINE Bubble_Sort
+        x = a( (first+last) / 2 )
+        i = first
+        j = last
+        do
+          do while (a(i) < x)
+              i=i+1
+          end do
+          do while (x < a(j))
+              j=j-1
+          end do
+          if (i >= j) exit
+          t = a(i);  a(i) = a(j);  a(j) = t
+          t = b(i);  b(i) = b(j);  b(j) = t
+          i=i+1
+          j=j-1
+        end do
+        if (first < i-1) call quicksort(a, b, first, i-1)
+        if (j+1 < last)  call quicksort(a, b, j+1, last)
+      end subroutine quicksort
 !***********************************************************************!
 !!OUTPUT DEFECTS FOR OVITO
 
