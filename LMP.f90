@@ -107,9 +107,6 @@ contains
     !Dimer lammps object initially has no atoms in it
     call lammps_command(lmpDimer, 'delete_atoms group all')
 
-    !Optimization for Dimer force/energy calculations
-    call lammps_command(lmpDimer, 'neigh_modify every 2 delay 10 check yes')
-
   end subroutine LMP_DIMER_INIT
 
 !***********************************************************************!
@@ -153,7 +150,7 @@ contains
 
   end subroutine LMP_RELAX
 !***********************************************************************!
-  subroutine LMP_DOSE_RELAX
+  subroutine LMP_STRESS_RELAX
 
   use system
 
@@ -162,51 +159,49 @@ contains
   integer :: i
   character (len=200) :: str
 
-  IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Relaxing System'
+  IF (ISTEP .EQ. 1) THEN
 
-  write(str,'(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
-  if (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) print *, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
-  call lammps_command(lmp, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
+    IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Relaxing System'
 
-  !Minimize/relax the system with stress profile considerations
-  call lammps_command(lmp, 'min_style cg')
-  call lammps_command(lmp, 'minimize 1.0e-10 1.0e-10 5000 50000')
+    write(str,'(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
+    if (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) print *, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
+    
+    call lammps_command(lmp, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
+    call lammps_command(lmp, 'min_style cg')
+    call lammps_command(lmp, 'minimize 1.0e-10 1.0e-10 5000 50000')
+    call lammps_command(lmp, 'unfix f_boxrelax')
 
-  call lammps_command(lmp, 'unfix f_boxrelax')
+    ENCALC = lmpEnergy
+    !reversed sign; positive is tension
+    PRESS = -lmpPressure
 
-  ENCALC = lmpEnergy
-  !reversed sign; positive is tension
-  PRESS = -lmpPressure
+    IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Finished Relaxation'
 
-  IF (MOD(ISTEP,NFREQ) .EQ. 0 .and. rank == 0) write(*,'(A)') 'Finished Relaxation'
+    ! Update the reference lattice
+    DO I=1, NATOMR
+      RR(1,I) = RR(1,I)/EPSX
+      RR(2,I) = RR(2,I)/EPSY
+      RR(3,I) = RR(3,I)/EPSZ
+    END DO
 
-  ! Update the reference lattice
+    call lammps_extract_box(lmp, lmpBoxLo, lmpBoxHi,xy,yz,xz,periodicity,box_change)
 
-  ! Divide by old strain to get original values
-  DO I=1, NATOMR
-    RR(1,I) = RR(1,I)/EPSX
-    RR(2,I) = RR(2,I)/EPSY
-    RR(3,I) = RR(3,I)/EPSZ
-  END DO
+    EPSX = (lmpBoxHi(1)-lmpBoxLo(1)) / (rbox*rlat)  
+    EPSY = (lmpBoxHi(2)-lmpBoxLo(2)) / (rbox*rlat)  
+    EPSZ = (lmpBoxHi(3)-lmpBoxLo(3)) / (rbox*rlat)  
 
-  call lammps_extract_box(lmp, lmpBoxLo, lmpBoxHi,xy,yz,xz,periodicity,box_change)
+    DO I=1, NATOMR
+      RR(1,I) = RR(1,I)*EPSX
+      RR(2,I) = RR(2,I)*EPSY
+      RR(3,I) = RR(3,I)*EPSZ
+    END DO
 
-  EPSX = (lmpBoxHi(1)-lmpBoxLo(1)) / (rbox*rlat)  
-  EPSY = (lmpBoxHi(2)-lmpBoxLo(2)) / (rbox*rlat)  
-  EPSZ = (lmpBoxHi(3)-lmpBoxLo(3)) / (rbox*rlat)  
+    write(str,'(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ',RBOX*EPSX,' y final 0 ',RBOX*EPSY,' z final 0 ',RBOX*EPSZ
+    call lammps_command(lmpDimer, 'change_box all '//trim(str)//' units lattice')
 
-  !update with new strain
-  DO I=1, NATOMR
-    RR(1,I) = RR(1,I)*EPSX
-    RR(2,I) = RR(2,I)*EPSY
-    RR(3,I) = RR(3,I)*EPSZ
-  END DO
+  END IF
 
-  ! print *, rbox, EPSX, EPSY, EPSZ  
-  write(str,'(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ',RBOX*EPSX,' y final 0 ',RBOX*EPSY,' z final 0 ',RBOX*EPSZ
-  call lammps_command(lmpDimer, 'change_box all '//trim(str)//' units lattice')
-
-  end subroutine LMP_DOSE_RELAX
+  end subroutine LMP_STRESS_RELAX
 !***********************************************************************!
 
   subroutine LMP_CASCADE
