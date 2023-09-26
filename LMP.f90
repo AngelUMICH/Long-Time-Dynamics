@@ -43,9 +43,15 @@ contains
     call lammps_command(lmp, 'atom_style atomic')
     call lammps_command(lmp, 'atom_modify map array')
 
-    write(str,'(f7.5)') rlat
-    if (rank ==0) print *, 'lattice bcc '//trim(str)
-    call lammps_command(lmp, 'lattice bcc '//trim(str))
+
+    if (TLAT .eq. 1) then
+      write(str,'(a,x,f7.5)') 'bcc',rlat
+    else if (TLAT .eq. 2) then
+      write(str,'(a,x,f7.5)') 'fcc',rlat
+    end if
+
+    if (rank ==0) print *, 'lattice '//trim(str)
+    call lammps_command(lmp, 'lattice '//trim(str))
 
     write(str,'(f3.1,x,f8.5,x,f3.1,x,f8.5,x,f3.1,x,f8.5)') 0.0,rbox,0.0,rbox,0.0,rbox
     if (rank ==0) print *, 'region box block '//trim(str)//' units lattice'
@@ -94,8 +100,13 @@ contains
     call lammps_command(lmpDimer, 'atom_style atomic')
     call lammps_command(lmpDimer, 'atom_modify map array')
 
-    write(str,'(f7.5)') rlat
-    call lammps_command(lmpDimer, 'lattice bcc '//trim(str))
+    if (TLAT .eq. 1) then
+      write(str,'(a,x,f7.5)') 'bcc',rlat
+    else if (TLAT .eq. 2) then
+      write(str,'(a,x,f7.5)') 'fcc',rlat
+    end if
+
+    call lammps_command(lmpDimer, 'lattice '//trim(str))
 
     write(str,'(f3.1,x,f8.5,x,f3.1,x,f8.5,x,f3.1,x,f8.5)') 0.0,rbox,0.0,rbox,0.0,rbox
     call lammps_command(lmpDimer, 'region box block '//trim(str)//' units lattice')
