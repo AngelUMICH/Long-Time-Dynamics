@@ -109,7 +109,7 @@
       DECUT      = DECUT*DECUT
       NDVAC      = 0
       NDINT      = 0
-      NNEIGH     = 150
+      NNEIGH     = 100
       UPNEIGH    = .TRUE.
 
 !!IRRADIATION VARIABLES
@@ -336,28 +336,31 @@
 !BCC REFERENCE LATTICE CREATION ONLY
       SUBROUTINE CREATE_REF_LATTICE
 
-      USE SYSTEM, ONLY: RR,RBOX,NATOMR,TCRY,RLAT
+      USE SYSTEM, ONLY: RR,RBOX,NATOMR,TCRY,TLAT,RLAT,RANK
 
       IMPLICIT NONE
 
       INTEGER :: I,J,K,COUNT,SIZE
-      REAL*8  :: X1,Y1,Z1,X2,Y2,Z2
+      REAL*8  :: X1,Y1,Z1,X2,Y2,Z2,X3,Y3,Z3,X4,Y4,Z4
       LOGICAL :: EXISTS
 
-      X1 = 0; Y1=0; Z1=0
-      X2 = 0.5; Y2=0.5; Z2=0.5
-      COUNT=1
+      COUNT= 1
       SIZE = INT(RBOX)
 
       IF (TCRY .EQ. 1) THEN
 
+            IF (RANK .EQ. 0) PRINT *, 'Creating BCC Reference crystal'
+
             NATOMR = 2*SIZE**3
             ALLOCATE(RR(3,NATOMR))
+
+            X1 = 0;   Y1=0;   Z1=0
+            X2 = 0.5; Y2=0.5; Z2=0.5
             
             DO I = 1, SIZE
               DO J = 1, SIZE
                 DO K = 1, SIZE
-                  RR(1:3,COUNT) = (/X1+(I-1),Y1+(J-1),Z1+(K-1)/)
+                  RR(1:3,COUNT)   = (/X1+(I-1),Y1+(J-1),Z1+(K-1)/)
                   RR(1:3,COUNT+1) = (/X2+(I-1),Y2+(J-1),Z2+(K-1)/)
                   COUNT = COUNT + 2
                 END DO
