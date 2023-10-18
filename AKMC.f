@@ -815,6 +815,9 @@
 
       ENDDO
 
+      ! Flush the output buffer
+      CALL FLUSH(6)
+
       NDSTOT = MAX(sumInt, sumVac)
 
       IF(CALC) CALL MD_DPA
@@ -834,7 +837,7 @@
       ENDIF
 
       RETURN
-      END SUBROUTINE
+      END SUBROUTINE DCIDNT
 
 !************************************************************
 ! Idea is to decrease dimer search for defects using KMC    *
