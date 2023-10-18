@@ -480,22 +480,6 @@ SUBROUTINE DCIDNT
     END IF
   END DO
 
-  DO i = 1, NDTOT
-    IF (Neighbor(i) == 1) THEN
-      if (PX(6, i) < 0.0) then
-        write (22, "(f8.1,3(2x,f15.8))") PX(6, i), PX(1, i), PX(2, i), PX(3, i)
-      end if
-    END IF
-  END DO
-
-  DO i = 1, NDTOT
-    IF (Neighbor(i) == 1) THEN
-      if (PX(6, i) > 0.0) then
-        write (22, "(f8.1,3(2x,f15.8))") PX(6, i), PX(1, i), PX(2, i), PX(3, i)
-      end if
-    END IF
-  END DO
-
 !******** END write single vac and single int to result.dat
 !******** left defects after remove single defect
   newdef = NDTOT - nvac1 - nint1

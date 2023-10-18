@@ -25,3 +25,6 @@ $(LMPFLIB): LAMMPS.F90
 clean:
 	rm -rf *.o *.mod Obj_files
 
+format:
+	fprettify --indent 2 --line-length 132 --enable-decl --disable-indent-mod *.f LMP.f90
+
