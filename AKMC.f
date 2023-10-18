@@ -811,7 +811,10 @@ SUBROUTINE DCIDNT
     IF (PX(6, I) .GT. 0) sumInt = sumInt + int(abs(PX(6, I)))
     IF (PX(6, I) .LT. 0) sumVac = sumVac + int(abs(PX(6, I)))
 
-  END DO
+      ENDDO
+
+      ! Flush the output buffer
+      CALL FLUSH(6)
 
   NDSTOT = MAX(sumInt, sumVac)
 
@@ -831,8 +834,8 @@ SUBROUTINE DCIDNT
 
   END IF
 
-  RETURN
-END SUBROUTINE
+      RETURN
+      END SUBROUTINE DCIDNT
 
 !************************************************************
 ! Idea is to decrease dimer search for defects using KMC    *
