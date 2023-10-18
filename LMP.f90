@@ -171,14 +171,14 @@ subroutine LMP_STRESS_RELAX
 
   IF (ISTEP .EQ. 1) THEN
 
-    IF (MOD(ISTEP, NFREQ) .EQ. 0 .and. rank == 0) write (*, '(A)') 'Relaxing System'
+    IF (rank == 0) write (*, '(A)') 'Relaxing System'
 
     write (str, '(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
-    if (MOD(ISTEP, NFREQ) .EQ. 0 .and. rank == 0) print *, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
+    if (rank == 0) print *, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
 
     call lammps_command(lmp, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
     call lammps_command(lmp, 'min_style cg')
-    call lammps_command(lmp, 'minimize 1.0e-10 1.0e-10 5000 50000')
+    call lammps_command(lmp, 'minimize 1.0e-8 1.0e-8 5000 50000')
     call lammps_command(lmp, 'unfix f_boxrelax')
 
     ENCALC = lmpEnergy
