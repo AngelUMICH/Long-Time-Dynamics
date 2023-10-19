@@ -39,7 +39,7 @@ SUBROUTINE SYS_INPUT
 !!READING INTITIAL STRUCTURE
 
   NATOMC = int(lammps_get_natoms(lmp))
-  if (rank == 0) print *, NATOMC, " number of atoms"
+  if (rank .eq. 0) print *, NATOMC, " number of atoms"
   ALLOCATE (RA(3, NATOMC + NDEMAX))
   CALL RECV_LMP_POS
 
@@ -308,7 +308,7 @@ SUBROUTINE READ_RESTART
 
       !Change the simualtion dimensions with corresponding strain
       write (str, '(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
-      if (rank == 0) print *, 'change_box all '//trim(str)//' units lattice'
+      if (rank .eq. 0) print *, 'change_box all '//trim(str)//' units lattice'
       call lammps_command(lmp, 'change_box all '//trim(str)//' units lattice')
       call lammps_command(lmpDimer, 'change_box all '//trim(str)//' units lattice')
     END IF
@@ -316,7 +316,7 @@ SUBROUTINE READ_RESTART
     !update atom count in lammps
     !need to change atom type if creating different atom types
     !at the moment only atom type 1 are made
-    if (natomc < int(lammps_get_natoms(lmp))) then
+    if (natomc .lt. int(lammps_get_natoms(lmp))) then
       write (str, '(I0)') NATOMC
       call lammps_command(lmp, 'delete_atoms group all')
       !if (rank ==0) print *,'create_atoms 1 random '//trim(str)//' 384753 NULL'
