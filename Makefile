@@ -4,8 +4,8 @@ LMPLIB = /home/achavira/software/lammps/build/liblammps_linux.a
 LMPCWRAP = ./LAMMPS-wrapper.o
 LMPFLIB = ./LAMMPS.o
 
-OBJS = LAMMPS.o LAMMPS-wrapper.o DEFINE.o LMP.o INIT.o FUNCT.o DIMER.o MAIN.o AKMC.o
-FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form -ffixed-line-length-132 #-Wall -fcheck=all
+OBJS = LAMMPS.o LAMMPS-wrapper.o BINS.o DEFINE.o LMP.o INIT.o FUNCT.o DIMER.o MAIN.o AKMC.o
+FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form #-Wall -fcheck=all
 LIBS = -lgomp -lstdc++ -lm -ldl -ljpeg -lpng
 
 opld: $(OBJS)
@@ -26,5 +26,5 @@ clean:
 	rm -rf *.o *.mod Obj_files
 
 format:
-	fprettify --indent 2 --line-length 132 --enable-decl --disable-indent-mod *.f LMP.f90
+	fprettify --indent 2 --enable-decl --strict-indent --c-relations --whitespace-decl 1 *.f LMP.f90
 

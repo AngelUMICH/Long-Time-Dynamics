@@ -12,7 +12,6 @@
 
 !***********************************************************************!
 !!APPLY THE PERIODIC BOUNDARY CONDITION TO THE SYSTEM
-
 REAL*8 FUNCTION PBC(X, DIM)
 
   USE SYSTEM, ONLY: RBOX, RBH1, RBH2, EPSX, EPSY, EPSZ
@@ -40,11 +39,9 @@ REAL*8 FUNCTION PBC(X, DIM)
 
   RETURN
 
-END
-
+END FUNCTION PBC
 !***********************************************************************!
 !!PERIODIC CONDIITONS ONLY USED FOR FINDING DEFECTS
-
 REAL*8 FUNCTION PBC_DEFECT(X)
 
   USE SYSTEM, ONLY: RBOX, RBH1, RBH2
@@ -52,8 +49,6 @@ REAL*8 FUNCTION PBC_DEFECT(X)
   IMPLICIT NONE
 
   REAL*8 X
-
-!      PBC_DEFECT = X-RBOX*NINT(X/RBOX)
 
   IF ((X .LE. RBH1) .AND. (X .GE. RBH2)) THEN
     PBC_DEFECT = X
@@ -65,12 +60,8 @@ REAL*8 FUNCTION PBC_DEFECT(X)
 
   RETURN
 
-END FUNCTION
+END FUNCTION PBC_DEFECT
 !***********************************************************************!
-!!IDENTIFY THE DEFECT/CENTER OF AV IN THE SYSTEM
-!!THIS ALGORITHM IS ONLY VALID FOR BCC SYSTEM,E.G. IRON
-!!A GENERALIZED VERSION IS ALSO AVALABLE
-
 SUBROUTINE FIND_DEFECT
 
   USE SYSTEM
@@ -91,7 +82,7 @@ SUBROUTINE FIND_DEFECT
     CALL POLY_CRYSTAL_WS
   END IF
 
-!!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
+  !!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
 
   DO I = 1, NATOMC
     IF (TI(I) .NE. 1) NDINT = NDINT + 1
@@ -274,7 +265,7 @@ SUBROUTINE POLY_CRYSTAL_WS
 
   IDLO = NATOMC/NPROCS*(RANK) + 1
   IDHI = NATOMC/NPROCS*(RANK + 1)
-  IF (RANK == NPROCS - 1) IDHI = IDHI + MOD(NATOMC, NPROCS)
+  IF (RANK .eq. NPROCS - 1) IDHI = IDHI + MOD(NATOMC, NPROCS)
 
   CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
   CALL MPI_BCAST(UPNEIGH, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, IERR)
@@ -336,7 +327,7 @@ SUBROUTINE POLY_CRYSTAL_WS
   CALL MPI_REDUCE(TV, TVBUFF, SIZE(TV), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
   CALL MPI_REDUCE(TI, TIBUFF, SIZE(TI), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
 
-  IF (RANK == 0) THEN
+  IF (RANK .eq. 0) THEN
     TV = TVBUFF
     TI = TIBUFF
   END IF
@@ -347,6 +338,7 @@ SUBROUTINE DEFECT_NEIGH_UPDATE(LO, HI)
 
   USE SYSTEM
   USE DEFECT
+  USE BINS, ONLY: maxNeighborSize
 
   IMPLICIT NONE
 
@@ -356,8 +348,8 @@ SUBROUTINE DEFECT_NEIGH_UPDATE(LO, HI)
   REAL*8 :: RX, RY, RZ, RS, PBC
   REAL*8 START, FINISH
   REAL*8 :: RSLIST(NNEIGH)
-
-  if (rank == 0) print *, 'Updating defect neighbor lists'
+  INTEGER :: RFNEIGH(maxNeighborSize)
+  if (rank .eq. 0) WRITE (*, '(a)') 'Updating defect neighbor lists'
 
   UPNEIGH = .FALSE.
 
@@ -366,25 +358,32 @@ SUBROUTINE DEFECT_NEIGH_UPDATE(LO, HI)
   RX = 0; RY = 0; RZ = 0; RS = 0
   RSLIST = 0; RNEIGH = 0
 
+  IF (.NOT. RFGRID%isInitialized) THEN
+    CALL RFGRID%initBinGrid(20, 20, 20, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+    CALL RFGRID%assignAtomsToBins(RR, NATOMR)
+  END IF
+
   !FOR EACH ATOM IN THE SYSTEM FIND N NEAREST REFERENCE ATOMS
   DO I = LO, HI
     RSLIST = HUGE(RS)
-    DO J = 1, NATOMR
-      RX = PBC(RA(1, I) - RR(1, J), 1)
-      RY = PBC(RA(2, I) - RR(2, J), 2)
-      RZ = PBC(RA(3, I) - RR(3, J), 3)
+    RFNEIGH = RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I))
+    J = 1
+    DO WHILE (RFNEIGH(J) .NE. 0 .AND. J .LE. SIZE(RFNEIGH))
+      RX = PBC(RA(1, I) - RR(1, RFNEIGH(J)), 1)
+      RY = PBC(RA(2, I) - RR(2, RFNEIGH(J)), 2)
+      RZ = PBC(RA(3, I) - RR(3, RFNEIGH(J)), 3)
       RS = RX*RX + RY*RY + RZ*RZ
-      IF (RS < RSLIST(NNEIGH)) THEN
+      IF (RS .lt. RSLIST(NNEIGH)) THEN
         RSLIST(NNEIGH) = RS
-        RNEIGH(NNEIGH, I) = J
+        RNEIGH(NNEIGH, I) = RFNEIGH(J)
         CALL quicksort(RSLIST, RNEIGH(:, I), 1, NNEIGH)
-      ELSE
       END IF
+      J = J + 1
     END DO
   END DO
 
   CALL CPU_TIME(FINISH)
-  IF (RANK == NPROCS - 1) WRITE (*, '(a,f14.5,a)') 'Neighbor list update time= ', FINISH - START, ' s'
+  IF (RANK .eq. NPROCS - 1) WRITE (*, '(a,f14.5,a)') 'Neighbor list update time= ', FINISH - START, ' s'
 
 END SUBROUTINE DEFECT_NEIGH_UPDATE
 !***********************************************************************!
@@ -399,20 +398,20 @@ recursive subroutine quicksort(a, b, first, last)
   i = first
   j = last
   do
-    do while (a(i) < x)
+    do while (a(i) .lt. x)
       i = i + 1
     end do
-    do while (x < a(j))
+    do while (x .lt. a(j))
       j = j - 1
     end do
-    if (i >= j) exit
+    if (i .ge. j) exit
     t = a(i); a(i) = a(j); a(j) = t
     t = b(i); b(i) = b(j); b(j) = t
     i = i + 1
     j = j - 1
   end do
-  if (first < i - 1) call quicksort(a, b, first, i - 1)
-  if (j + 1 < last) call quicksort(a, b, j + 1, last)
+  if (first .lt. i - 1) call quicksort(a, b, first, i - 1)
+  if (j + 1 .lt. last) call quicksort(a, b, j + 1, last)
 end subroutine quicksort
 !***********************************************************************!
 !!OUTPUT DEFECTS FOR OVITO
