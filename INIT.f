@@ -25,6 +25,8 @@ SUBROUTINE READ_INPUT
     RLAT, RBOX, PCUTR, DCUTR, DECUT, NDSMAX, NDRMAX, RDIMER, FNRMAX, FNRMIN, DSTEPF, &
     DSTEPM, TEMP, PKAE, DRATE, NFREKL, TIME, SIGX, SIGY, SIGZ
 
+  CLOSE (10)
+
 END SUBROUTINE READ_INPUT
 !***********************************************************************!
 !!READING SYSTEM INPUT FROM VARIOUS FILES
@@ -63,8 +65,9 @@ SUBROUTINE SYS_INIT
 
   IMPLICIT NONE
 
-  INTEGER :: N, I
+  INTEGER :: N, I, NEMIG
   INTEGER, ALLOCATABLE :: SEED(:)
+  LOGICAL :: EXISTS
 
 !!CREATE THE NECESSARY DIRECTORIES
 
@@ -187,39 +190,37 @@ SUBROUTINE SYS_INIT
   ALLOCATE (EMIG(2, 50)); EMIG = 0
   ALLOCATE (EMIC(2, 50)); EMIC = 1
 
-  EMIG(1, 1) = 0.637
-  EMIG(1, 2) = 0.462
-  EMIG(1, 3) = 0.604
-  EMIG(1, 4) = 0.612
+  INQUIRE (FILE='emig.dat', EXIST=EXISTS)
+  IF (.NOT. EXISTS) THEN
+    WRITE (*, *) "File 'emig.dat' cannot be found"
+    STOP
+  END IF
 
-  do i = 5, 50
-    EMIG(1, i) = 3.5
-  end do
+  OPEN (UNIT=11, FILE='emig.dat')
 
-  EMIG(2, 1) = 0.167
-  EMIG(2, 2) = 0.083
-  EMIG(2, 3) = 0.054
-  EMIG(2, 4) = 0.043
-  EMIG(2, 5) = 0.021
-  EMIG(2, 6) = 0.006
-  EMIG(2, 7) = 0.005
-  EMIG(2, 8) = 0.002
-  EMIG(2, 9) = 0.006
-  EMIG(2, 10) = 0.016
-  EMIG(2, 11) = 0.0535
-  EMIG(2, 12) = 0.031
-  EMIG(2, 13) = 0.031
-  EMIG(2, 14) = 0.031
-  EMIG(2, 15) = 0.031
-  EMIG(2, 16) = 0.031
-  EMIG(2, 17) = 0.031
-  EMIG(2, 18) = 0.031
-  EMIG(2, 19) = 0.031
-  EMIG(2, 20) = 0.031
+  !READ VAC EMIGS
+  READ (11, *)
+  READ (11, *) NEMIG
 
-  do i = 21, 50
-    EMIG(2, i) = 3.0
-  end do
+  DO I = 1, NEMIG
+    READ (11, *) EMIG(1, I)
+  END DO
+  DO I = NEMIG + 1, 50
+    EMIG(1, I) = 3.5
+  END DO
+
+  !READ INT EMIGS
+  READ (11, *)
+  READ (11, *) NEMIG
+
+  DO I = 1, NEMIG
+    READ (11, *) EMIG(2, I)
+  END DO
+  DO I = NEMIG + 1, 50
+    EMIG(2, I) = 3.0
+  END DO
+
+  CLOSE (11)
 
   CALL READ_RESTART
 
