@@ -23,7 +23,7 @@ Module Bins
 
     integer :: nBins, nBinsX, nBinsY, nBinsZ
     logical :: isInitialized = .false.
-    real*8 :: xBinSize, yBinSize, zBinSize !lattie constant
+    real*8 :: xBinSize, yBinSize, zBinSize !lattice constant
     type(Bin), allocatable, dimension(:, :, :) :: binList
 
   contains
@@ -139,6 +139,10 @@ contains
     xBinId = int(x/this%xBinSize) + 1
     yBinId = int(y/this%yBinSize) + 1
     zBinId = int(z/this%zBinSize) + 1
+    ! Check if the atom is at the edge of the box; put into the last bin if it is
+    if (xBinId .gt. this%nBinsX) xBinId = 20
+    if (yBinId .gt. this%nBinsY) yBinId = 20
+    if (zBinId .gt. this%nBinsZ) zBinId = 20
     topX = xBinId + 1
     topY = yBinId + 1
     topZ = zBinId + 1
