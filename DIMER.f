@@ -527,6 +527,18 @@ CONTAINS
 
     CALL CREATE_ATOMS(THIS)
 
+!COMPUTING PER ATOM POTENTIAL ENERGY
+
+    CALL LAMMPS_COMMAND(lmpDimer, 'compute peratom all pe/atom')
+
+!SUM REDUCE ONLY NATOM1 POTENTIAL ENERGY
+
+    WRITE (S_NATOM1, '(1I0)') THIS%NATOM1
+
+    CALL LAMMPS_COMMAND(lmpDimer, 'group saddle id 1:'//TRIM(S_NATOM1))
+
+    CALL LAMMPS_COMMAND(lmpDimer, 'compute pesum saddle reduce sum c_peratom')
+
     RETURN
 
   END SUBROUTINE DIMER_INIT
@@ -542,6 +554,12 @@ CONTAINS
     TYPE(DIMER), INTENT(INOUT) :: THIS
 
     !REMOVE THE SYSTEM FROM THE DIMER LAMMPS INSTANCE
+
+    CALL LAMMPS_COMMAND(lmpDimer, 'uncompute pesum')
+
+    CALL LAMMPS_COMMAND(lmpDimer, 'uncompute peratom')
+
+    CALL LAMMPS_COMMAND(lmpDimer, 'group saddle delete')
 
     CALL LAMMPS_COMMAND(lmpDimer, 'delete_atoms group all')
 
@@ -1080,7 +1098,7 @@ CONTAINS
     CALL LAMMPS_COMMAND(lmpDimer, 'run 0')
 
     !CALCULATE ENERGY
-    CALL LAMMPS_EXTRACT_COMPUTE(ENERGY, lmpDimer, 'thermo_pe', &
+    CALL LAMMPS_EXTRACT_COMPUTE(ENERGY, lmpDimer, 'pesum', &
                                 LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
 
     !CALCULATE FORCES
