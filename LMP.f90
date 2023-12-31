@@ -169,12 +169,12 @@ contains
     integer :: i
     character(len=200) :: str
 
-    IF (ISTEP .EQ. 1) THEN
+    if (ISTEP .eq. 1 .and. SigRelOn) then
 
-      IF (rank .eq. 0) write (*, '(A)') 'Relaxing System'
+      if (rank .eq. 0) write (*, '(A)') 'Relaxing System'
 
       write (str, '(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
-      if (rank .eq. 0) print *, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
+      if (rank .eq. 0) write (*, '(A)') 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
 
       call lammps_command(lmp, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
       call lammps_command(lmp, 'min_style cg')
@@ -185,14 +185,14 @@ contains
       !reversed sign; positive is tension
       PRESS = -lmpPressure
 
-      IF (MOD(ISTEP, NFREQ) .EQ. 0 .and. rank .eq. 0) write (*, '(A)') 'Finished Relaxation'
+      if (rank .eq. 0) write (*, '(A)') 'Finished Relaxation'
 
       ! Update the reference lattice
-      DO I = 1, NATOMR
+      do I = 1, NATOMR
         RR(1, I) = RR(1, I)/EPSX
         RR(2, I) = RR(2, I)/EPSY
         RR(3, I) = RR(3, I)/EPSZ
-      END DO
+      end do
 
       call lammps_extract_box(lmp, lmpBoxLo, lmpBoxHi, xy, yz, xz, periodicity, box_change)
 
@@ -200,16 +200,16 @@ contains
       EPSY = (lmpBoxHi(2) - lmpBoxLo(2))/(rbox*rlat)
       EPSZ = (lmpBoxHi(3) - lmpBoxLo(3))/(rbox*rlat)
 
-      DO I = 1, NATOMR
+      do I = 1, NATOMR
         RR(1, I) = RR(1, I)*EPSX
         RR(2, I) = RR(2, I)*EPSY
         RR(3, I) = RR(3, I)*EPSZ
-      END DO
+      end do
 
       write (str, '(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
       call lammps_command(lmpDimer, 'change_box all '//trim(str)//' units lattice')
 
-    END IF
+    end if
 
   end subroutine LMP_STRESS_RELAX
 !***********************************************************************!
