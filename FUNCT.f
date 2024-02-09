@@ -388,6 +388,7 @@ SUBROUTINE DEFECT_NEIGH_UPDATE(LO, HI)
 END SUBROUTINE DEFECT_NEIGH_UPDATE
 !***********************************************************************!
 recursive subroutine quicksort(a, b, first, last)
+  ! This quicksort routine sorts both a and b arrays based on the values in a
   implicit none
   real*8 a(*), x, t
   integer b(*)
@@ -413,6 +414,43 @@ recursive subroutine quicksort(a, b, first, last)
   if (first .lt. i - 1) call quicksort(a, b, first, i - 1)
   if (j + 1 .lt. last) call quicksort(a, b, j + 1, last)
 end subroutine quicksort
+!***********************************************************************!
+recursive subroutine quicksort_int(array1, array2, lo, hi)
+    implicit none
+    integer :: array1(*), array2(*)
+    integer :: pivot, right, left, temp, n, lo, hi
+
+    n = size(array1(lo:hi))
+
+    if (n > 1) then
+      pivot = array1(lo)
+      left = lo
+      right = hi
+      do while (left .lt. right)
+        do while (array1(left) < pivot)
+          left = left + 1
+        end do
+        do while (array1(right) > pivot)
+          right = right - 1
+        end do
+        if (left <= right) then
+          temp = array1(left)
+          array1(left) = array1(right)
+          array1(right) = temp
+          temp = array2(left)
+          array2(left) = array2(right)
+          array2(right) = temp
+          left = left + 1
+          right = right - 1
+        end if
+      end do
+
+      call quicksort_int(array1, array2, lo, right)
+      call quicksort_int(array1, array2, left, hi)
+
+    end if
+
+end subroutine quicksort_int
 !***********************************************************************!
 !!OUTPUT DEFECTS FOR OVITO
 
