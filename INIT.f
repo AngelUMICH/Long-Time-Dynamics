@@ -29,21 +29,57 @@ SUBROUTINE READ_INPUT
 
 END SUBROUTINE READ_INPUT
 !***********************************************************************!
+SUBROUTINE LMP_INIT
+
+  USE MPI
+  USE LMP_Driver
+  USE SYSTEM
+
+  IMPLICIT NONE
+
+  INTEGER :: EXTRA
+
+  ! CREATE LAMMPS INSTANCES FOR SYSTEM AND DIMER OBJECTS
+  call lmpSystem%init(MPI_COMM_WORLD, 0, 'system')
+  call lmpSystem%setupSystem
+
+  IF (NDIMER .GE. NPROCS) THEN
+
+    DIMERPR = NDIMER/NPROCS
+    EXTRA = MOD(NDIMER, NPROCS)
+
+    LDIMERI = RANK*DIMERPR + MIN(RANK, EXTRA) + 1
+    IF (RANK .LT. EXTRA) THEN
+      UDIMERI = LDIMERI + DIMERPR
+    ELSE
+      UDIMERI = LDIMERI + DIMERPR - 1
+    END IF
+  ELSE IF ( NDIMER .LT. NPROCS) THEN
+
+    LDIMERI = MOD(RANK, NDIMER) + 1
+    UDIMERI = LDIMERI
+  END IF
+
+  call lmpDimer%init(MPI_COMM_WORLD, LDIMERI, 'dimer')
+  call lmpDimer%setupSystem
+
+END SUBROUTINE LMP_INIT
+!***********************************************************************!
 !!READING SYSTEM INPUT FROM VARIOUS FILES
 
 SUBROUTINE SYS_INPUT
 
   USE SYSTEM
-  USE LMP_DRIVER
+  USE LMP_Driver
 
   IMPLICIT NONE
 
   !!READING INTITIAL STRUCTURE
 
-  NATOMC = int(lammps_get_natoms(lmp))
-  if (rank .eq. 0) print *, NATOMC, " number of atoms"
-  ALLOCATE (RA(3, NATOMC + NDEMAX))
-  CALL RECV_LMP_POS
+  NATOMC = int(lammps_get_natoms(lmpSystem%getLammpsPtr()))
+  if (RANK .eq. 0) write(*, '(1I0, A)') NATOMC, " number of atoms"
+  allocate (RA(3, NATOMC + NDEMAX))
+  call lmpSystem%getPositions
 
   !!CREATING REFERENCE STRUCTURE
 
@@ -136,13 +172,6 @@ SUBROUTINE SYS_INIT
   EPSX = 1.0
   EPSY = 1.0
   EPSZ = 1.0
-
-  !!VARIABLES ASSSOCIATED WITH MPI
-  !! DIMER LIMIT VARIABLES BEING SET UP FOR J LOOP
-
-  DIMERPR = NDIMER/NPROCS
-  LDIMERI = DIMERPR*RANK + 1
-  UDIMERI = DIMERPR*(RANK + 1)
 
   !!ALLOCATE DYNAMIC MATRIX
   !!FROM HERE,SEE DEFINE.F FOR THE MEANING OF VARIABLES
@@ -307,23 +336,22 @@ SUBROUTINE READ_RESTART
       END DO
 
       !Change the simualtion dimensions with corresponding strain
-      write (str, '(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
+      write (str, '(A,F10.8,A,F10.8,A,F10.8)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
       if (rank .eq. 0) print *, 'change_box all '//trim(str)//' units lattice'
-      call lammps_command(lmp, 'change_box all '//trim(str)//' units lattice')
-      call lammps_command(lmpDimer, 'change_box all '//trim(str)//' units lattice')
+      call lammps_command(lmpSystem%getLammpsPtr(), 'change_box all '//trim(str)//' units lattice')
+      call lammps_command( lmpDimer%getLammpsPtr(), 'change_box all '//trim(str)//' units lattice')
     END IF
 
     !update atom count in lammps
     !need to change atom type if creating different atom types
     !at the moment only atom type 1 are made
-    if (natomc .lt. int(lammps_get_natoms(lmp))) then
+    if (natomc .lt. int(lammps_get_natoms(lmpSystem%getLammpsPtr()))) then
       write (str, '(I0)') NATOMC
-      call lammps_command(lmp, 'delete_atoms group all')
-      !if (rank ==0) print *,'create_atoms 1 random '//trim(str)//' 384753 NULL'
-      call lammps_command(lmp, 'create_atoms 1 random '//trim(str)//' 384753 NULL')
+      call lammps_command(lmpSystem%getLammpsPtr(), 'delete_atoms group all')
+      call lammps_command(lmpSystem%getLammpsPtr(), 'create_atoms 1 random '//trim(str)//' 384753 NULL')
     end if
 
-    CALL SEND_OPLD_POS
+    call lmpSystem%assignPositions
 
   END IF
 
