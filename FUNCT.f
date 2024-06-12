@@ -255,6 +255,7 @@ SUBROUTINE POLY_CRYSTAL_WS
   USE SYSTEM
   USE DEFECT
   USE MPI
+  USE LMP_DRIVER
 
   IMPLICIT NONE
 
@@ -267,8 +268,8 @@ SUBROUTINE POLY_CRYSTAL_WS
   IDHI = NATOMC/NPROCS*(RANK + 1)
   IF (RANK .eq. NPROCS - 1) IDHI = IDHI + MOD(NATOMC, NPROCS)
 
-  CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, MPI_COMM_WORLD, IERR)
-  CALL MPI_BCAST(UPNEIGH, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, IERR)
+  CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
+  CALL MPI_BCAST(UPNEIGH, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), IERR)
 
   IF (MOD(ISTEP - 1, 50) .EQ. 0 .and. UPNEIGH) CALL DEFECT_NEIGH_UPDATE(IDLO, IDHI)
 
@@ -304,7 +305,7 @@ SUBROUTINE POLY_CRYSTAL_WS
 !$OMP END DO
 
 !$OMP SINGLE
-  CALL MPI_ALLREDUCE(OCC, OCCBUFF, SIZE(OCC), MPI_INT, MPI_SUM, MPI_COMM_WORLD, IERR)
+  CALL MPI_ALLREDUCE(OCC, OCCBUFF, SIZE(OCC), MPI_INT, MPI_SUM, lmpSystem%getCommunicator(), IERR)
 !$OMP END SINGLE
 
 !!USING OCCUPANCY TO DETERMINE DEFECTS
@@ -324,8 +325,8 @@ SUBROUTINE POLY_CRYSTAL_WS
 !$OMP END DO
 !$OMP END PARALLEL
 
-  CALL MPI_REDUCE(TV, TVBUFF, SIZE(TV), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
-  CALL MPI_REDUCE(TI, TIBUFF, SIZE(TI), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
+  CALL MPI_REDUCE(TV, TVBUFF, SIZE(TV), MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
+  CALL MPI_REDUCE(TI, TIBUFF, SIZE(TI), MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
 
   IF (RANK .eq. 0) THEN
     TV = TVBUFF
@@ -612,18 +613,18 @@ SUBROUTINE CREATE_VACANCIES(NFRKL, IDS)
   INTEGER :: IDS(NFRKL)
   CHARACTER(LEN=10) :: IDSTR
 
-  CALL MPI_BCAST(IDS, NFRKL, MPI_INT, 0, MPI_COMM_WORLD, IERR)
+  CALL MPI_BCAST(IDS, NFRKL, MPI_INT, 0, lmpSystem%getCommunicator(), IERR)
 
   !Update lammps on what atoms were deleted
   DO I = 1, NFRKL
     WRITE (IDSTR, '(I0)') IDS(I)
-    CALL lammps_command(lmp, 'group deleteList id '//TRIM(IDSTR))
+    CALL lammps_command(lmpSystem%getLammpsPtr(), 'group deleteList id '//TRIM(IDSTR))
   END DO
-  CALL lammps_command(lmp, 'delete_atoms group deleteList')
+  CALL lammps_command(lmpSystem%getLammpsPtr(), 'delete_atoms group deleteList')
 
   !Upadate all other processes on changed parameters
-  NATOMC = int(lammps_get_natoms(lmp))
-  CALL RECV_LMP_POS
+  NATOMC = int(lammps_get_natoms(lmpSystem%getLammpsPtr()))
+  call lmpSystem%getPositions
 
 END SUBROUTINE CREATE_VACANCIES
 !***********************************************************************!
