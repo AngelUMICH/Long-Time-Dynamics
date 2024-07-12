@@ -22,7 +22,7 @@ Module LMP_Driver
 
   contains
 
-    procedure :: init
+    procedure :: init => LAMMPS_Container_init
     procedure :: setupSystem
     procedure :: getLammpsPtr
     procedure :: getCommunicator
@@ -45,7 +45,7 @@ Module LMP_Driver
 contains
 !***********************************************************************!
   
-  subroutine init(this, commToSplit, groupId, compType)
+  subroutine LAMMPS_Container_init(this, commToSplit, groupId, compType)
 
     class(LAMMPS_Container), intent(inout) :: this
     integer, intent(in) :: commToSplit, groupId
@@ -62,7 +62,7 @@ contains
       call mpi_comm_split(this%communicator, this%rank, this%rank, this%controlCommunicator, ierr)
     end if
 
-    call lammps_open('lmp -log none -screen none', this%communicator, this%lammpsInstance)
+    call lammps_open('lmp -log none', this%communicator, this%lammpsInstance)
 
     if (compType == 's') then
       this%isSystem = .true.
@@ -70,7 +70,7 @@ contains
       this%isDimer = .true.
     end if
 
-  end subroutine init
+  end subroutine LAMMPS_Container_init
 !***********************************************************************!
 
   subroutine setupSystem(this)
@@ -96,16 +96,16 @@ contains
       write (str, '(a,x,f7.5)') 'fcc', rlat
     end if
 
-    if (RANK .eq. 0) print *, 'lattice '//trim(str)
+    if (RANK .eq. 0 .and. this%isSystem) print *, 'lattice '//trim(str)
     call lammps_command(this%lammpsInstance, 'lattice '//trim(str))
 
     write (str, '(f3.1,x,f8.5,x,f3.1,x,f8.5,x,f3.1,x,f8.5)') 0.0, rbox, 0.0, rbox, 0.0, rbox
-    if (RANK .eq. 0) print *, 'region box block '//trim(str)//' units lattice'
+    if (RANK .eq. 0 .and. this%isSystem) print *, 'region box block '//trim(str)//' units lattice'
     call lammps_command(this%lammpsInstance, 'region box block '//trim(str)//' units lattice')
     call lammps_command(this%lammpsInstance, 'create_box 1 box')
 
     !Read from input file using LAMMPS
-    if (RANK .eq. 0) print *, "Reading in initial positions"
+    if (RANK .eq. 0 .and. this%isSystem) print *, "Reading in initial positions"
     call lammps_file(this%lammpsInstance, 'in.lammps')
     ! call lammps_command(this%lammpsInstance, 'thermo_style custom step pe lx ly lz pxx pyy pzz')
 
