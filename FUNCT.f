@@ -66,6 +66,7 @@ SUBROUTINE FIND_DEFECT
 
   USE SYSTEM
   USE DEFECT
+  USE PolyhedralTemplateMatching
 
   IMPLICIT NONE
 
@@ -75,6 +76,11 @@ SUBROUTINE FIND_DEFECT
   NDVAC = 0
   TI = 0
   TV = 0
+
+  call ptmCalculator%init(lmpSystem, 'default')
+  call ptmCalculator%doPTMCalculation
+
+  stop
 
   IF (TCRY .EQ. 1) THEN
     CALL SINGLE_CRYSTAL_WS
