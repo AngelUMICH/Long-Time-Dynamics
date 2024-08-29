@@ -66,7 +66,8 @@ SUBROUTINE FIND_DEFECT
 
   USE SYSTEM
   USE DEFECT
-  USE PolyhedralTemplateMatching
+  use MicroStrucFeatures, only: features
+  use LMP_DRIVER, only: lmpSystem
 
   IMPLICIT NONE
 
@@ -77,10 +78,8 @@ SUBROUTINE FIND_DEFECT
   TI = 0
   TV = 0
 
-  call ptmCalculator%init(lmpSystem, 'default')
-  call ptmCalculator%doPTMCalculation
-
-  stop
+  call features%grains%init(lmpSystem)
+  call features%grains%identifyGrains
 
   IF (TCRY .EQ. 1) THEN
     CALL SINGLE_CRYSTAL_WS
@@ -351,7 +350,7 @@ SUBROUTINE DEFECT_NEIGH_UPDATE(LO, HI)
 
   !LO & HI ARE THE IDS FOR WHICH NEIGH LIST WILL BE UPDATED FOR
   INTEGER :: LO, HI
-  INTEGER :: I, J, K
+  INTEGER :: I, J
   REAL*8 :: RX, RY, RZ, RS, PBC
   REAL*8 START, FINISH
   REAL*8 :: RSLIST(NNEIGH)
@@ -366,14 +365,15 @@ SUBROUTINE DEFECT_NEIGH_UPDATE(LO, HI)
   RSLIST = 0; RNEIGH = 0
 
   IF (.NOT. RFGRID%isInitialized) THEN
-    CALL RFGRID%initBinGrid(20, 20, 20, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+    CALL RFGRID%initBinGrid(40, 40, 40, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
     CALL RFGRID%assignAtomsToBins(RR, NATOMR)
   END IF
 
   !FOR EACH ATOM IN THE SYSTEM FIND N NEAREST REFERENCE ATOMS
   DO I = LO, HI
     RSLIST = HUGE(RS)
-    RFNEIGH = RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I))
+    call RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I), 1.2D0)
+    RFNEIGH = RFGRID%singleNeighList
     J = 1
     DO WHILE (RFNEIGH(J) .NE. 0 .AND. J .LE. SIZE(RFNEIGH))
       RX = PBC(RA(1, I) - RR(1, RFNEIGH(J)), 1)
@@ -467,9 +467,11 @@ SUBROUTINE OVITO
 
   USE DEFECT
 
+  USE MicroStrucFeatures, only: features
+
   IMPLICIT NONE
 
-  INTEGER I, J
+  INTEGER I
 
   CHARACTER(len=200) FILENAME
 
@@ -525,10 +527,10 @@ SUBROUTINE OVITO
   WRITE (30, '(2F10.4,I5)') 0.00, RBOX*EPSX, 3
   WRITE (30, '(2F10.4,I5)') 0.00, RBOX*EPSY, 3
   WRITE (30, '(2F10.4,I5)') 0.00, RBOX*EPSZ, 3
-  WRITE (30, '(A)') 'ITEM: ATOMS x y z'
+  WRITE (30, '(A)') 'ITEM: ATOMS x y z grain'
 
   DO I = 1, NATOMC
-    WRITE (30, '(3F14.5)') (RA(J, I), J=1, 3)
+    WRITE (30, '(3F14.5,1I14)') RA(1, I),RA(2, I),RA(3, I),features%grains%grainOccupy(i)
   END DO
 
   CLOSE (30)
@@ -552,6 +554,8 @@ SUBROUTINE BASIC_DAMAGE(NFRKL)
   N = 0
 
   MOVEID = 0
+
+  IF (NFRKL .LE. 0) RETURN
 
   CALL RANDOM_SEED()
 
@@ -814,15 +818,3 @@ SUBROUTINE RESTART
   END IF
 
 END SUBROUTINE
-
-!***********************************************************************!
-!***********************************************************************!
-!***          SELF EVOLVING ATOMISTIC KINETIC MONTE CARLO CODE       ***!
-!***                        AUTHOR:XU,HAIXUAN                        ***!
-!***             MATERIALS SCIENCE AND TECHNOLOGY DIVISION           ***!
-!***                      OAK RIDGE NATIONAL LAB                     ***!
-!***                          XUH1@ORNL.GOV                          ***!
-!***                           VERSION 3.0                           ***!
-!***                       ALL RIGHTS RESERVED                       ***!
-!***********************************************************************!
-!***********************************************************************!

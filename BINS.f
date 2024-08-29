@@ -2,20 +2,20 @@ Module Bins
 
   implicit none
 
-  integer :: tempAtomListSize = 400
-  integer :: maxNeighborSize = 20000
+  integer :: maxListSize = 400
+  integer :: maxNeighborSize = 2000
 !***********************************************************************!
   Type Bin
+    ! Atom ids cannot start with zero otherwise errors will incur
+    ! Could add check to avoid atom id equal 0
 
     integer :: nAtoms = 0
     logical :: isPrinted = .false.
-    integer, allocatable, dimension(:) :: tempAtomList
     integer, allocatable, dimension(:) :: atomList
 
   contains
 
     procedure :: addAtom
-    procedure :: resizeAtomList
 
   end type Bin
 !***********************************************************************!
@@ -24,6 +24,8 @@ Module Bins
     integer :: nBins, nBinsX, nBinsY, nBinsZ
     logical :: isInitialized = .false.
     real*8 :: xBinSize, yBinSize, zBinSize !lattice constant
+    integer :: singleListCount
+    integer, allocatable, dimension(:) :: singleNeighList
     type(Bin), allocatable, dimension(:, :, :) :: binList
 
   contains
@@ -41,29 +43,18 @@ contains
     class(Bin), intent(inout) :: this
     integer, intent(in) :: atomID
 
-    if (this%nAtoms .eq. size(this%tempAtomList)) then
+    if (this%nAtoms .ge. maxListSize) then
       if (.not. this%isPrinted) then
-        print *, "Make tempAtomList larger. Current size = ", tempAtomListSize
+        print *, "Make atomList larger. Current size = ", maxListSize
         this%isPrinted = .true.
-        return
       end if
+      return
     end if
 
-    this%tempAtomList(this%nAtoms + 1) = atomID
+    this%atomList(this%nAtoms + 1) = atomID
     this%nAtoms = this%nAtoms + 1
 
   end subroutine addAtom
-!***********************************************************************!
-  subroutine resizeAtomList(this)
-
-    implicit none
-
-    class(Bin) :: this
-
-    allocate (this%atomList(this%nAtoms))
-    this%atomList = this%tempAtomList(1:this%nAtoms)
-    deallocate (this%tempAtomList)
-  end subroutine resizeAtomList
 !***********************************************************************!
   subroutine initBinGrid(this, nBinsX, nBinsY, nBinsZ, xBoxLength, yBoxLength, zBoxLength)
 
@@ -87,12 +78,14 @@ contains
     do i = 1, nBinsX
       do j = 1, nBinsY
         do k = 1, nBinsZ
-          allocate (this%binList(i, j, k)%tempAtomList(tempAtomListSize))
+          allocate (this%binList(i, j, k)%atomList(maxListSize))
         end do
       end do
     end do
 
     this%isInitialized = .true.
+    allocate(this%singleNeighList(maxNeighborSize))
+    this%singleNeighList = 0
 
   end subroutine initBinGrid
 !***********************************************************************!
@@ -106,118 +99,109 @@ contains
     integer :: nAtoms
     integer :: atomID, xBinId, yBinId, zBinId
 
-    if (nAtoms/this%nBins .lt. 4) write (*, *) "Warning: Too few atoms per bin"
+    if (nAtoms/this%nBins .lt. 1) write (*, *) "Warning: Too few atoms per bin"
 
     do atomID = 1, nAtoms
       xBinId = int(atoms(1, atomID)/this%xBinSize) + 1
       yBinId = int(atoms(2, atomID)/this%yBinSize) + 1
       zBinId = int(atoms(3, atomID)/this%zBinSize) + 1
-      call this%binList(xBinId, yBinId, zBinId)%addAtom(atomID)
-    end do
+      if (xBinId .ge. this%nBinsX) xBinId = this%nBinsX
+      if (yBinId .ge. this%nBinsY) yBinId = this%nBinsY
+      if (zBinId .ge. this%nBinsZ) zBinId = this%nBinsZ
 
-    do xBinId = 1, this%nBinsX
-      do yBinId = 1, this%nBinsY
-        do zBinId = 1, this%nBinsZ
-          call this%binList(xBinId, yBinId, zBinId)%resizeAtomList()
-        end do
-      end do
+      if (xBinId <= 0 .or. xBinId > this%nBinsX .or. &
+        & yBinId <= 0 .or. yBinId > this%nBinsY .or. &
+        & zBinId <= 0 .or. zBinId > this%nBinsZ) then
+        print *, 'Bad bin ids:', xBinId, yBinId, zBinId
+        return
+      end if
+
+      call this%binList(xBinId, yBinId, zBinId)%addAtom(atomID)
     end do
 
   end subroutine assignAtomsToBins
 !***********************************************************************!
-  function getNearestNeighbors(this, x, y, z) result(neighborAtoms)
+  subroutine getNearestNeighbors(this, x, y, z, l)
+    ! Given a cube length l and position return an atom list of
+    ! which bins make up the cube.
 
     implicit none
 
     class(BinGrid), intent(inout) :: this
-    real*8, intent(in) :: x, y, z
+    real*8, intent(in) :: x, y, z, l
     integer, dimension(maxNeighborSize) :: neighborAtoms
 
-    integer :: i, xBinId, yBinId, zBinId
-    integer :: topX, topY, topZ, botX, botY, botZ
+    integer :: i, j, k
+    integer :: xBinId, yBinId, zBinId, cxBinId, cyBinId, czBinId
+    integer :: count, binCount
+    integer, dimension(3) :: corner1, corner2
 
-    xBinId = int(x/this%xBinSize) + 1
-    yBinId = int(y/this%yBinSize) + 1
-    zBinId = int(z/this%zBinSize) + 1
-    ! Check if the atom is at the edge of the box; put into the last bin if it is
-    if (xBinId .gt. this%nBinsX) xBinId = 20
-    if (yBinId .gt. this%nBinsY) yBinId = 20
-    if (zBinId .gt. this%nBinsZ) zBinId = 20
-    topX = xBinId + 1
-    topY = yBinId + 1
-    topZ = zBinId + 1
-    botX = xBinId - 1
-    botY = yBinId - 1
-    botZ = zBinId - 1
+    ! Check l is not larger than box
+    if (2*int(l/this%xBinSize)+1 .ge. this%nBinsX .or. &
+    &   2*int(l/this%yBinSize)+1 .ge. this%nBinsY .or. &
+    &   2*int(l/this%zBinSize)+1 .ge. this%nBinsZ) then
 
-    !Check if the atom is at the edge of the box; apply periodic boundary conditions
-    if (topX .gt. this%nBinsX) topX = 1
-    if (botX .lt. 1) botX = this%nBinsX
-    if (topY .gt. this%nBinsY) topY = 1
-    if (botY .lt. 1) botY = this%nBinsY
-    if (topZ .gt. this%nBinsZ) topZ = 1
-    if (botZ .lt. 1) botZ = this%nBinsZ
+      write(*,'(A,1f8.3,A)') 'getNearestNeighbors: Radius L of ',l,&
+                        & ' is too large. Consider reducing.'
+      return
 
-    i = 0
-    neighborAtoms = 0
-    !top z plane
-    neighborAtoms(i + 1:i + this%binList(topX, topY, topZ)%nAtoms) = this%binList(topX, topY, topZ)%atomList
-    i = i + this%binList(topX, topY, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, topY, topZ)%nAtoms) = this%binList(xBinId, topY, topZ)%atomList
-    i = i + this%binList(xBinId, topY, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, topY, topZ)%nAtoms) = this%binList(botX, topY, topZ)%atomList
-    i = i + this%binList(botX, topY, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(topX, yBinId, topZ)%nAtoms) = this%binList(topX, yBinId, topZ)%atomList
-    i = i + this%binList(topX, yBinId, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, yBinId, topZ)%nAtoms) = this%binList(xBinId, yBinId, topZ)%atomList
-    i = i + this%binList(xBinId, yBinId, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, yBinId, topZ)%nAtoms) = this%binList(botX, yBinId, topZ)%atomList
-    i = i + this%binList(botX, yBinId, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(topX, botY, topZ)%nAtoms) = this%binList(topX, botY, topZ)%atomList
-    i = i + this%binList(topX, botY, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, botY, topZ)%nAtoms) = this%binList(xBinId, botY, topZ)%atomList
-    i = i + this%binList(xBinId, botY, topZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, botY, topZ)%nAtoms) = this%binList(botX, botY, topZ)%atomList
-    i = i + this%binList(botX, botY, topZ)%nAtoms
-    !middle z plane
-    neighborAtoms(i + 1:i + this%binList(topX, topY, zBinId)%nAtoms) = this%binList(topX, topY, zBinId)%atomList
-    i = i + this%binList(topX, topY, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, topY, zBinId)%nAtoms) = this%binList(xBinId, topY, zBinId)%atomList
-    i = i + this%binList(xBinId, topY, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, topY, zBinId)%nAtoms) = this%binList(botX, topY, zBinId)%atomList
-    i = i + this%binList(botX, topY, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(topX, yBinId, zBinId)%nAtoms) = this%binList(topX, yBinId, zBinId)%atomList
-    i = i + this%binList(topX, yBinId, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, yBinId, zBinId)%nAtoms) = this%binList(xBinId, yBinId, zBinId)%atomList
-    i = i + this%binList(xBinId, yBinId, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, yBinId, zBinId)%nAtoms) = this%binList(botX, yBinId, zBinId)%atomList
-    i = i + this%binList(botX, yBinId, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(topX, botY, zBinId)%nAtoms) = this%binList(topX, botY, zBinId)%atomList
-    i = i + this%binList(topX, botY, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, botY, zBinId)%nAtoms) = this%binList(xBinId, botY, zBinId)%atomList
-    i = i + this%binList(xBinId, botY, zBinId)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, botY, zBinId)%nAtoms) = this%binList(botX, botY, zBinId)%atomList
-    i = i + this%binList(botX, botY, zBinId)%nAtoms
-    !bottom z plane
-    neighborAtoms(i + 1:i + this%binList(topX, topY, botZ)%nAtoms) = this%binList(topX, topY, botZ)%atomList
-    i = i + this%binList(topX, topY, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, topY, botZ)%nAtoms) = this%binList(xBinId, topY, botZ)%atomList
-    i = i + this%binList(xBinId, topY, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, topY, botZ)%nAtoms) = this%binList(botX, topY, botZ)%atomList
-    i = i + this%binList(botX, topY, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(topX, yBinId, botZ)%nAtoms) = this%binList(topX, yBinId, botZ)%atomList
-    i = i + this%binList(topX, yBinId, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, yBinId, botZ)%nAtoms) = this%binList(xBinId, yBinId, botZ)%atomList
-    i = i + this%binList(xBinId, yBinId, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, yBinId, botZ)%nAtoms) = this%binList(botX, yBinId, botZ)%atomList
-    i = i + this%binList(botX, yBinId, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(topX, botY, botZ)%nAtoms) = this%binList(topX, botY, botZ)%atomList
-    i = i + this%binList(topX, botY, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(xBinId, botY, botZ)%nAtoms) = this%binList(xBinId, botY, botZ)%atomList
-    i = i + this%binList(xBinId, botY, botZ)%nAtoms
-    neighborAtoms(i + 1:i + this%binList(botX, botY, botZ)%nAtoms) = this%binList(botX, botY, botZ)%atomList
-    i = i + this%binList(botX, botY, botZ)%nAtoms
+    end if
 
-  end function getNearestNeighbors
+    ! Find the center bin id in which the position lies
+    cxBinId = int(x/this%xBinSize) + 1
+    cyBinId = int(y/this%yBinSize) + 1
+    czBinId = int(z/this%zBinSize) + 1
+    if (cxBinId .gt. this%nBinsX) cxBinId = this%nBinsX
+    if (cyBinId .gt. this%nBinsY) cyBinId = this%nBinsY
+    if (czBinId .gt. this%nBinsZ) czBinId = this%nBinsX
+
+    !Find the two diagonal bin corners which span the cube
+    !with the bin found previously in the center
+    corner1(1) = cxBinId - (int(l/this%xBinSize) + 1)
+    corner1(2) = cyBinId - (int(l/this%yBinSize) + 1)
+    corner1(3) = czBinId - (int(l/this%zBinSize) + 1)
+
+    corner2(1) = cxBinId + (int(l/this%xBinSize) + 1)
+    corner2(2) = cyBinId + (int(l/this%yBinSize) + 1)
+    corner2(3) = czBinId + (int(l/this%zBinSize) + 1)
+
+    ! Loop through bins and add atom list to result
+    count  = 0
+
+    do i = corner1(1), corner2(1)
+      xBinId = i
+      if (xBinId .gt. this%nBinsX) xBinId = mod(i, this%nBinsX)
+      if (xBinId .le. 0) xBinId = this%nBinsX + i
+
+      do j = corner1(2), corner2(2)
+        yBinId = j
+        if (yBinId .gt. this%nBinsY) yBinId = mod(j, this%nBinsY)
+        if (yBinId .le. 0) yBinId = this%nBinsY + j
+
+        do k = corner1(3), corner2(3)
+          zBinId = k
+          if (zBinId .gt. this%nBinsZ) zBinId = mod(k, this%nBinsZ)
+          if (zBinId .le. 0) zBinId = this%nBinsZ + k
+
+          binCount = this%binList(xBinId,yBinId,zBinId)%nAtoms
+
+          if (count + binCount .gt. maxNeighborSize) then
+            write(*,'(A,I0,A,I0)') 'Neighbor list size of ',count+binCount,&
+                                  &' exceeded max size: ', maxNeighborSize
+            write(*,'(A)') 'Consider increasing grid dimensions.'
+            return
+          end if
+
+          this%singleNeighList(count + 1:count + binCount) &
+          & = this%binList(xBinId,yBinId,zBinId)%atomList(1:binCount)
+          count = count + binCount
+
+          this%singleListCount = count
+
+        end do
+      end do
+    end do
+
+  end subroutine getNearestNeighbors
 !***********************************************************************!
 end module Bins
