@@ -62,7 +62,7 @@ contains
       call mpi_comm_split(this%communicator, this%rank, this%rank, this%controlCommunicator, ierr)
     end if
 
-    call lammps_open('lmp -log none', this%communicator, this%lammpsInstance)
+    call lammps_open('lmp -log none -screen none', this%communicator, this%lammpsInstance)
 
     if (compType == 's') then
       this%isSystem = .true.
@@ -252,7 +252,7 @@ contains
     implicit none
 
     class(LAMMPS_Container), intent(inout) :: this
-    integer :: i, j
+    integer :: i
     character(len=200) :: str
 
     real*8, dimension(3) :: lmpBoxLo = 0, lmpBoxHi = 0
