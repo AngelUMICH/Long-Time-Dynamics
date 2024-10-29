@@ -688,9 +688,8 @@ SUBROUTINE DCIDNT
     IF (PX(6, I) .LT. 0) sumVac = sumVac + int(abs(PX(6, I)))
 
   END DO
-  IF (MOD(ISTEP, NFREQ) .EQ. 0) CALL DEFECT_PRINT(PX, NDTOT)
 
-  ! Flush the output buffer
+  IF (MOD(ISTEP, NFREQ) .EQ. 0) CALL DEFECT_PRINT(PX, NDTOT)
   CALL FLUSH (6)
 
   NDSTOT = MAX(sumInt, sumVac)
@@ -743,9 +742,9 @@ SUBROUTINE DFSEL
   do i = 1, ndtot
     j = int(abs(px(6, i)))
     if (px(6, i) .lt. 0) then
-      k = 1
+      k = 1 !VACS
     else
-      k = 2
+      k = 2 !INTS
     end if
 
     !if only vacancies then skip ints
@@ -780,10 +779,10 @@ SUBROUTINE DFSEL
     if (tdam == 3 .and. k == 2) cycle
 
     sump = sump + pj(k, i)*scalef
-    if (sump .ge. prop) goto 200
+    if (sump .ge. prop) exit
   end do
 
-200 continue
+  OBFQSUM = SPEED - pj(k, i)*scalef
 
   ijump = i
   NDTOT = 1
@@ -811,7 +810,7 @@ SUBROUTINE DFSEL
 
   RETURN
 
-END SUBROUTINE
+END SUBROUTINE DFSEL
 
 !***********************************************************************!
 !THIS SUBROUTINE IS TO CHOSE AV BASED ON THE MIRGRATION ENERGY BARRIERS
@@ -829,7 +828,7 @@ SUBROUTINE KMC
 
   INTEGER I, K, jmapsz
 
-  REAL*8 RND, dt, scalef, prop
+  REAL*8 RND, dt, scalef, prop, TOTFQSUM
 
   CHARACTER(LEN=40) STR
 
@@ -838,6 +837,7 @@ SUBROUTINE KMC
 !FQSUM:SUM OF FREQUENCY,POSUM:SUM OF PROBABILITIES(FOR CHECK ONLY)
 
     FQSUM = 0.0D0
+    TOTFQSUM = 0.0D0
     POSUM = 0.0D0
     jmapsz = 1000
 
@@ -859,7 +859,7 @@ SUBROUTINE KMC
     !DETERMINE TIME STEP IN KMC
 
     if (FQSUM .gt. 0.0) then
-      TMEAN = -LOG10(RND)/FQSUM
+      TMEAN = -LOG10(RND)/(FQSUM+OBFQSUM) !With time correction using other objects FQs
 
       dt = 1.0/fqsum
       scalef = dt*dfloat(jmapsz)
