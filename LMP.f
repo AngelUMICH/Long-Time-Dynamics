@@ -32,6 +32,7 @@ Module LMP_Driver
     procedure :: assignPositions
     procedure :: relaxSystemEnergy
     procedure :: relaxSystemPressure
+    procedure :: updateRef
 
     end type LAMMPS_Container
 
@@ -233,6 +234,8 @@ contains
     call lammps_command(this%lammpsInstance, 'min_style cg')
     call lammps_command(this%lammpsInstance, 'minimize 1.0e-10 1.0e-10 1000 10000')
 
+    call lammps_extract_compute(this%pressure, this%lammpsInstance, 'thermo_press', LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR)
+
     ENCALC = this%energy
     PRESS = -this%pressure !reversed sign; positive is tension
 
@@ -252,37 +255,44 @@ contains
     implicit none
 
     class(LAMMPS_Container), intent(inout) :: this
-    integer :: i
     character(len=200) :: str
 
+    if (ISTEP .eq. 1) then
+
+      write (str, '(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
+      if (RANK .eq. 0 .and. SigRelOn) write (*, '(A)') 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
+
+      if (SigRelOn) call lammps_command(this%lammpsInstance, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
+      call this%relaxSystemEnergy
+      if (SigRelOn) call lammps_command(this%lammpsInstance, 'unfix f_boxrelax')
+
+      if (rank .eq. 0 .and. SigRelOn) then
+        write(*,'(6A14)') 'pxx','pyy','pzz','pxy','pyz','pxz'
+        write(*,'(6E14.5)') PRESS(1), PRESS(2), PRESS(3), PRESS(4), PRESS(5), PRESS(6)
+      end if
+
+    end if
+
+  end subroutine relaxSystemPressure
+
+!***********************************************************************!
+  subroutine updateRef(this)
+
+    use system
+    use MPI
+
+    implicit none
+
+    class(LAMMPS_Container), intent(inout) :: this
+
+    integer :: i
     real*8, dimension(3) :: lmpBoxLo = 0, lmpBoxHi = 0
     real*8 :: xy = 0, yz = 0, xz = 0
     logical, dimension(3) :: periodicity = 0
     logical :: box_change = 0
+    character(len=200) :: str
 
-    if (ISTEP .eq. 1 .and. SigRelOn) then
-
-      if (RANK .eq. 0) write (*, '(A)') 'Relaxing System'
-
-      write (str, '(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
-      if (RANK .eq. 0) write (*, '(A)') 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
-
-      call lammps_command(this%lammpsInstance, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
-      call lammps_command(this%lammpsInstance, 'min_style cg')
-      call lammps_command(this%lammpsInstance, 'minimize 1.0e-8 1.0e-8 1000 10000')
-      call lammps_command(this%lammpsInstance, 'unfix f_boxrelax')
-
-      ENCALC = this%energy
-      PRESS = -this%pressure !reversed sign; positive is tension
-
-      if (RANK .eq. 0) write (*, '(A)') 'Finished Relaxation'
-
-      ! Update the reference lattice
-      do i = 1, NATOMR
-        RR(1, i) = RR(1, i)/EPSX
-        RR(2, i) = RR(2, i)/EPSY
-        RR(3, i) = RR(3, i)/EPSZ
-      end do
+    if (ISTEP .eq. 1) then
 
       call lammps_extract_box(this%lammpsInstance, lmpBoxLo, lmpBoxHi, xy, yz, xz, periodicity, box_change)
 
@@ -290,11 +300,9 @@ contains
       EPSY = (lmpBoxHi(2) - lmpBoxLo(2))/(rbox*rlat)
       EPSZ = (lmpBoxHi(3) - lmpBoxLo(3))/(rbox*rlat)
 
-      do i = 1, NATOMR
-        RR(1, i) = RR(1, i)*EPSX
-        RR(2, i) = RR(2, i)*EPSY
-        RR(3, i) = RR(3, i)*EPSZ
-      end do
+      if (rank == 0) write(*,'(A,3F8.3,A)') 'New system box size (', RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ, ' )'
+
+      call create_ref_lattice
 
       ! Center box corner at origin
       write (str, '(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
@@ -303,7 +311,7 @@ contains
 
     end if
 
-  end subroutine relaxSystemPressure
+  end subroutine updateRef
 
 !***********************************************************************!
 end module LMP_Driver

@@ -20,8 +20,8 @@ SUBROUTINE READ_INPUT
   OPEN (UNIT=10, FILE='par_init.dat')
 
   !!READING SYSTEM PARAMTER, SEE PAR_INIT.DAT FOR DETAILS
-  READ (10, '( 11(I10/),5(F10.3/),2(I10/),8(F14.6/),(I10/),(ES15.5/),(L/),2(F10.6/),(F10.6) )') &
-    REST, TJOB, TDAM, TPBC, TCRY, NTSTEP, NFREQ, NDEMAX, NAVMAX, NDIMER, TLAT, &
+  READ (10, '( 12(I10/),5(F10.3/),2(I10/),8(F14.6/),(I10/),(ES15.5/),(L/),2(F10.6/),(F10.6) )') &
+    REST, TJOB, TDAM, TPBC, TCRY, NTSTEP, NFREQ, NDEMAX, NAVMAX, NDIMER, TLAT, MGSZ, &
     RLAT, RBOX, PCUTR, DCUTR, DECUT, NDSMAX, NDRMAX, RDIMER, FNRMAX, FNRMIN, DSTEPF, &
     DSTEPM, TEMP, PKAE, DRATE, NFREKL, TIME, SIGRELON, SIGX, SIGY, SIGZ
 
@@ -80,12 +80,7 @@ SUBROUTINE SYS_INPUT
   if (RANK .eq. 0) write(*, '(1I0, A)') NATOMC, " number of atoms"
   allocate (RA(3, NATOMC + NDEMAX))
   call lmpSystem%getPositions
-
-  !!CREATING REFERENCE STRUCTURE
-
-  CALL CREATE_REF_LATTICE
-
-  RETURN
+  
 
 END SUBROUTINE SYS_INPUT
 !***********************************************************************!
@@ -173,6 +168,9 @@ SUBROUTINE SYS_INIT
   EPSY = 1.0
   EPSZ = 1.0
 
+  ! INPLACE TO ALLOCATE MEMORY. WILL BE CHANGED AFTER RELAXATION.
+  NATOMR = NATOMC
+
   !!ALLOCATE DYNAMIC MATRIX
   !!FROM HERE,SEE DEFINE.F FOR THE MEANING OF VARIABLES
 
@@ -197,13 +195,11 @@ SUBROUTINE SYS_INIT
   ALLOCATE (SR(4, NAVMAX, NDIMER)); SR = 0.0D0
   ALLOCATE (OR(4, NAVMAX, NDIMER)); OR = 0.0D0
 
-  IF (RANK .EQ. 0) THEN
-    ALLOCATE (TVBUFF(NATOMR)); TVBUFF = 0
-    ALLOCATE (TIBUFF(NATOMC)); TIBUFF = 0
-    ALLOCATE (SRBUFF(4, NAVMAX, NDIMER)); SRBUFF = 0.0D0
-    ALLOCATE (NDBUFF(NDIMER)); NDBUFF = 0
-    ALLOCATE (EMBUFF(NDIMER)); EMBUFF = 0.0D0
-  END IF
+  ALLOCATE (TVBUFF(NATOMR)); TVBUFF = 0
+  ALLOCATE (TIBUFF(NATOMC)); TIBUFF = 0
+  ALLOCATE (SRBUFF(4, NAVMAX, NDIMER)); SRBUFF = 0.0D0
+  ALLOCATE (NDBUFF(NDIMER)); NDBUFF = 0
+  ALLOCATE (EMBUFF(NDIMER)); EMBUFF = 0.0D0
 
   !!VARIABLES ASSOCIATED WITH DIMER
 
@@ -328,6 +324,17 @@ SUBROUTINE READ_RESTART
 
     CLOSE (27)
 
+    ! READ REFERENCE LATTICE
+
+    open(unit=21, file='pos_ref.dat')
+    read(21, *) natomr
+    read(21, *)
+    if (.not. allocated(RR)) allocate(RR(3,NATOMR))
+    do i= 1, natomr
+      read(21, *) (RR(j,i), j=1,3)
+    end do
+    close(21)
+
     IF (EPSX .NE. 1.0 .OR. EPSY .NE. 1.0 .OR. EPSZ .NE. 1.0) THEN
       DO I = 1, NATOMR
         RR(1, I) = RR(1, I)*EPSX
@@ -359,60 +366,60 @@ END SUBROUTINE READ_RESTART
 !***********************************************************************!
 !BCC REFERENCE LATTICE CREATION ONLY
 SUBROUTINE CREATE_REF_LATTICE
+! Create the initial reference system that will be used to identify point defects
+! and their clusters.
 
-  USE SYSTEM, ONLY: RR, RBOX, NATOMR, TCRY, RLAT, RANK
+  USE SYSTEM
+  use LMP_DRIVER
+  use MicroStrucFeatures
+  use MPI
 
   IMPLICIT NONE
 
-  INTEGER :: I, J, K, COUNT, SIZE
-  REAL*8 :: X1, Y1, Z1, X2, Y2, Z2
-  LOGICAL :: EXISTS
+  integer :: i,j
+  real*8 :: bounds(6)
+  logical :: exists
 
-  COUNT = 1
-  SIZE = INT(RBOX)
+  real*8 x, y, z
 
-  IF (TCRY .EQ. 1) THEN
+  ! Create the reference lattice by first removing the grain
+  ! boundaries. Then create the pos_ref.dat file for future use.
 
-    IF (RANK .EQ. 0) PRINT *, 'Creating BCC Reference crystal'
+  ! First create the reference lattice thorugh features object
+  call features%grains%init(lmpSystem, MGSZ)
+  call features%grains%identifyGrains
 
-    NATOMR = 2*SIZE**3
-    ALLOCATE (RR(3, NATOMR))
+  bounds = (/0.0D0, RBOX*EPSX, 0.0D0, RBOX*EPSY, 0.0D0, RBOX*EPSZ/)
+  call features%reference%createReferenceLattice(features%grains,bounds,RA,natomc)
 
-    X1 = 0; Y1 = 0; Z1 = 0
-    X2 = 0.5; Y2 = 0.5; Z2 = 0.5
+  NATOMR = features%reference%numPoints
+  if (.not. allocated(RR)) allocate(RR(3,NATOMR))
+  RR(:,:NATOMR) = features%reference%lattice(:,:NATOMR)
 
-    DO I = 1, SIZE
-      DO J = 1, SIZE
-        DO K = 1, SIZE
-          RR(1:3, COUNT) = (/X1 + (I - 1), Y1 + (J - 1), Z1 + (K - 1)/)
-          RR(1:3, COUNT + 1) = (/X2 + (I - 1), Y2 + (J - 1), Z2 + (K - 1)/)
-          COUNT = COUNT + 2
-        END DO
-      END DO
-    END DO
+  ! Create the pos_ref.dat reference file in the current directory.
+  inquire (file='pos_ref.dat', exist=exists)
+  call MPI_BCAST(exists, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), ierr)
+  if (.not. exists) then
+    if (rank == 0) then
+      write (*, '(A)') "Creating 'pos_ref.dat' reference file."
+    end if
+  else
+    if (rank == 0) then
+      write (*, '(A)') '**************************************************'
+      write (*, '(A)') "Please remove file pos_ref.dat from the directory."
+      write (*, '(A)') '**************************************************'
+    end if
+    CALL MPI_FINALIZE(ierr)
+    stop
+  end if
 
-  ELSE IF (TCRY .EQ. 2) THEN
-
-    INQUIRE (FILE='pos_ref.dat', EXIST=EXISTS)
-    IF (.NOT. EXISTS) THEN
-      WRITE (*, *) "File 'pos_ref.dat' cannot be found."
-      WRITE (*, *) "A reference file is needed for polycrystal."
-      STOP
-    END IF
-
-    OPEN (UNIT=21, FILE='pos_ref.dat')
-    READ (21, *) NATOMR
-    READ (21, *)
-    ALLOCATE (RR(3, NATOMR))
-    READ (21, *) (RR(1, I), RR(2, I), RR(3, I), I=1, NATOMR)
-
-    DO I = 1, NATOMR
-      RR(1, I) = RR(1, I)/RLAT
-      RR(2, I) = RR(2, I)/RLAT
-      RR(3, I) = RR(3, I)/RLAT
-    END DO
-
-  END IF
+  if (rank == 0) then
+    open (unit=21, file='pos_ref.dat', status='new')
+    write (21, '(I0)') NATOMR
+    write (21, *)
+    write (21, '(3F14.5)') (RR(1, i), RR(2, i), RR(3, i), i=1, NATOMR)
+    close(21)
+  end if
 
 END SUBROUTINE CREATE_REF_LATTICE
 

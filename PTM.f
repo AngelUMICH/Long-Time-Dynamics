@@ -13,7 +13,7 @@ Module PolyhedralTemplateMatching
     character(len=100) :: enabledStructures
 
     real*8, dimension(:,:), allocatable :: ptmData
-    real*8 :: ptmThresh = 0.15
+    real*8 :: ptmThresh = 0.10
 
   contains
 

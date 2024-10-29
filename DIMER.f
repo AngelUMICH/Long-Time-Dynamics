@@ -534,6 +534,10 @@ CONTAINS
 
     CALL DIMER_UNIT(THIS%VN, THIS%NATOM1)
 
+! CORRECT SYSTEM SIZE
+
+    CALL CORRECT_SYSTEM_SIZE(THIS)
+
 !SEND DEFECT POSITIONS TO THIS%LMPCON%GETLAMMPSPTR()
 
     CALL CREATE_ATOMS(THIS)
@@ -1281,6 +1285,29 @@ CONTAINS
     CALL lammps_scatter_atoms(THIS%LMPCON%GETLAMMPSPTR(), 'x', POS)
 
   END SUBROUTINE SEND_POS
+!***********************************************************************!
+  SUBROUTINE CORRECT_SYSTEM_SIZE(THIS)
+
+    USE LMP_DRIVER
+    USE SYSTEM, ONLY: EPSX, EPSY, EPSZ, RBOX
+    USE MPI
+
+    IMPLICIT NONE
+
+    TYPE(DIMER), INTENT(IN) :: THIS
+
+    INTEGER :: IERR
+    REAL*8 :: BOXLO(3) = 0, BOXHI(3) = 0
+    REAL*8 :: XY,YZ,XZ
+    LOGICAL :: PERIOD(3), BOX_CHANGE
+    CHARACTER(LEN=200) :: STR
+
+    write (str, '(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
+    call mpi_bcast(str, len(str), MPI_CHARACTER, 0, THIS%LMPCON%getCommunicator(), ierr)
+    CALL LAMMPS_COMMAND(THIS%LMPCON%GETLAMMPSPTR(), 'change_box all '//trim(str)//' units lattice')
+
+
+  END SUBROUTINE CORRECT_SYSTEM_SIZE
 !***********************************************************************!
 END MODULE CLASS_DIMER
 

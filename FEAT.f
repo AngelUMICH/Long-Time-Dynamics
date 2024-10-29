@@ -1,6 +1,7 @@
 module MicroStrucFeatures
 
   use GrainIdentification, only: Grain
+  use ReferenceLattice
 
   implicit none
 !***********************************************************************!
@@ -8,6 +9,7 @@ module MicroStrucFeatures
   Type StructFeatures
 
     type(Grain) :: grains
+    type(RefLattice) :: reference
 
   end type StructFeatures
 

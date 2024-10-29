@@ -16,6 +16,7 @@ Module Bins
   contains
 
     procedure :: addAtom
+    procedure :: resetBin
 
   end type Bin
 !***********************************************************************!
@@ -33,12 +34,27 @@ Module Bins
     procedure :: initBinGrid
     procedure :: assignAtomsToBins
     procedure :: getNearestNeighbors
+    procedure :: resetGrid
 
   end type BinGrid
 !***********************************************************************!
 contains
 !***********************************************************************!
+  subroutine resetBin(this)
+
+    implicit none
+
+    class(Bin), intent(inout) :: this
+
+    this%atomList = 0
+    this%nAtoms = 0
+    this%isPrinted = .false.
+
+  end subroutine resetBin
+!***********************************************************************!
   subroutine addAtom(this, atomID)
+
+    implicit none
 
     class(Bin), intent(inout) :: this
     integer, intent(in) :: atomID
@@ -66,7 +82,7 @@ contains
 
     integer :: i, j, k
 
-    allocate (this%binList(nBinsX, nBinsY, nBinsZ))
+    if (.not. allocated(this%binList)) allocate(this%binList(nBinsX, nBinsY, nBinsZ))
     this%nBins = nBinsX*nBinsY*nBinsZ
     this%nBinsX = nBinsX
     this%nBinsY = nBinsY
@@ -78,13 +94,13 @@ contains
     do i = 1, nBinsX
       do j = 1, nBinsY
         do k = 1, nBinsZ
-          allocate (this%binList(i, j, k)%atomList(maxListSize))
+          if(.not. allocated(this%binList(i, j, k)%atomList)) &
+          &   allocate(this%binList(i, j, k)%atomList(maxListSize))
         end do
       end do
     end do
 
-    this%isInitialized = .true.
-    allocate(this%singleNeighList(maxNeighborSize))
+    if (.not. allocated(this%singleNeighList)) allocate(this%singleNeighList(maxNeighborSize))
     this%singleNeighList = 0
 
   end subroutine initBinGrid
@@ -98,6 +114,8 @@ contains
 
     integer :: nAtoms
     integer :: atomID, xBinId, yBinId, zBinId
+
+    call this%resetGrid
 
     if (nAtoms/this%nBins .lt. 1) write (*, *) "Warning: Too few atoms per bin"
 
@@ -120,6 +138,27 @@ contains
     end do
 
   end subroutine assignAtomsToBins
+!***********************************************************************!
+  subroutine resetGrid(this)
+
+    implicit none
+
+    class(BinGrid) :: this
+
+    integer :: i, j, k
+
+    do i = 1, this%nBinsX
+      do j = 1, this%nBinsY
+        do k = 1, this%nBinsZ
+          call this%binList(i,j,k)%resetBin
+        end do
+      end do
+    end do
+
+    this%singleListCount = 0
+    this%singleNeighList = 0
+
+  end subroutine resetGrid
 !***********************************************************************!
   subroutine getNearestNeighbors(this, x, y, z, l)
     ! Given a cube length l and position return an atom list of
@@ -157,16 +196,16 @@ contains
 
     !Find the two diagonal bin corners which span the cube
     !with the bin found previously in the center
-    corner1(1) = cxBinId - (int(l/this%xBinSize) + 1)
-    corner1(2) = cyBinId - (int(l/this%yBinSize) + 1)
-    corner1(3) = czBinId - (int(l/this%zBinSize) + 1)
+    corner1(1) = cxBinId - (int(l/this%xBinSize))
+    corner1(2) = cyBinId - (int(l/this%yBinSize))
+    corner1(3) = czBinId - (int(l/this%zBinSize))
 
-    corner2(1) = cxBinId + (int(l/this%xBinSize) + 1)
-    corner2(2) = cyBinId + (int(l/this%yBinSize) + 1)
-    corner2(3) = czBinId + (int(l/this%zBinSize) + 1)
+    corner2(1) = cxBinId + (int(l/this%xBinSize))
+    corner2(2) = cyBinId + (int(l/this%yBinSize))
+    corner2(3) = czBinId + (int(l/this%zBinSize))
 
     ! Loop through bins and add atom list to result
-    count  = 0
+    count  = 0; binCount = 0
 
     do i = corner1(1), corner2(1)
       xBinId = i
@@ -185,7 +224,8 @@ contains
 
           binCount = this%binList(xBinId,yBinId,zBinId)%nAtoms
 
-          if (count + binCount .gt. maxNeighborSize) then
+          if (abs(count + binCount) .gt. maxNeighborSize) then
+            print *, xBinId,yBinId,zBinId, count, binCount
             write(*,'(A,I0,A,I0)') 'Neighbor list size of ',count+binCount,&
                                   &' exceeded max size: ', maxNeighborSize
             write(*,'(A)') 'Consider increasing grid dimensions.'
@@ -196,11 +236,11 @@ contains
           & = this%binList(xBinId,yBinId,zBinId)%atomList(1:binCount)
           count = count + binCount
 
-          this%singleListCount = count
-
         end do
       end do
     end do
+
+    this%singleListCount = count
 
   end subroutine getNearestNeighbors
 !***********************************************************************!

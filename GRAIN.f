@@ -9,8 +9,8 @@ module GrainIdentification
 
     type(PTM) :: PTMCalculator
 
-    real*8 :: cDistThresh = 0.87 !lattice parameter
-    integer:: minGrainSize = 20 
+    real*8 :: cDistThresh = 1.0 !lattice parameter
+    integer :: minGrainSize
     integer:: numGrains = 0
     integer:: maxNumGrains = 50
 
@@ -38,7 +38,7 @@ contains
 
 !***********************************************************************!  
 
-  subroutine GRAIN_init(this, lammpsContainer)
+  subroutine GRAIN_init(this, lammpsContainer, minGrainSize)
 
     use LMP_DRIVER, only: LAMMPS_Container
 
@@ -46,6 +46,9 @@ contains
 
     class(Grain), intent(inout) :: this
     class(LAMMPS_Container), intent(in) :: lammpsContainer
+    integer, intent(in) :: minGrainSize
+
+    this%minGrainSize = minGrainSize
 
     call this%PTMCalculator%init(lammpsContainer, this%structuresArg)
 
@@ -94,7 +97,7 @@ contains
 
     call this%setGrainIdentity(clusterData, nClusters_2)
 
-    call this%adoptAtoms(1.0D0)
+    ! call this%adoptAtoms(1.0D0)
 
   end subroutine identifyGrains
 !***********************************************************************!
@@ -178,14 +181,14 @@ contains
 
     integer :: i, n
 
-    n = size(clusterIds); count = 0; qSum = 0
+    n = size(clusterIds)
 
     this%numGrains =  numGrains
 
     this%grainOccupy = clusterIds
 
     do id = 1, numGrains
-
+      count = 0; qSum = 0
       do i = 1, n
         if (clusterIds(i) .eq. id) then
           qSum(1) = this%PTMCalculator%ptmData(1,i)
@@ -194,12 +197,12 @@ contains
         end if
       end do
 
+      qAvg(1) = qSum(1)
+      qAvg(2:5) = qSum(2:5)/count
+      this%grainInfo(:,id) = qAvg
+
     end do
 
-    qAvg(1) = qSum(1)
-    qAvg(2:5) = qSum(2:5)/count
-
-    this%grainInfo(:,this%numGrains) = qAvg
 
   end subroutine setGrainIdentity
 !***********************************************************************!

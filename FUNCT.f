@@ -41,27 +41,6 @@ REAL*8 FUNCTION PBC(X, DIM)
 
 END FUNCTION PBC
 !***********************************************************************!
-!!PERIODIC CONDIITONS ONLY USED FOR FINDING DEFECTS
-REAL*8 FUNCTION PBC_DEFECT(X)
-
-  USE SYSTEM, ONLY: RBOX, RBH1, RBH2
-
-  IMPLICIT NONE
-
-  REAL*8 X
-
-  IF ((X .LE. RBH1) .AND. (X .GE. RBH2)) THEN
-    PBC_DEFECT = X
-  ELSEIF (X .LT. RBH2) THEN
-    PBC_DEFECT = X + RBOX
-  ELSE
-    PBC_DEFECT = X - RBOX
-  END IF
-
-  RETURN
-
-END FUNCTION PBC_DEFECT
-!***********************************************************************!
 SUBROUTINE FIND_DEFECT
 
   USE SYSTEM
@@ -78,14 +57,7 @@ SUBROUTINE FIND_DEFECT
   TI = 0
   TV = 0
 
-  call features%grains%init(lmpSystem)
-  call features%grains%identifyGrains
-
-  IF (TCRY .EQ. 1) THEN
-    CALL SINGLE_CRYSTAL_WS
-  ELSE IF (TCRY .EQ. 2) THEN
-    CALL POLY_CRYSTAL_WS
-  END IF
+  CALL WignerSeitzAnalysis
 
   !!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
 
@@ -100,171 +72,18 @@ SUBROUTINE FIND_DEFECT
   RETURN
 END SUBROUTINE FIND_DEFECT
 !***********************************************************************!
-SUBROUTINE SINGLE_CRYSTAL_WS
-
-  USE SYSTEM
-
-  USE DEFECT
-
-  IMPLICIT NONE
-
-  REAL*8 RX, RY, RZ, RS, PBC_DEFECT
-
-  INTEGER I, J, NBOX
-
-  INTEGER IX, IY, IZ, JX, JY, JZ, RX1, RY1, RZ1, RX2, RY2, RZ2
-
-  NBOX = INT(RBOX)*2
-
-      !!SCALE DOWN POSITIONS TO CUBE
-  DO I = 1, NATOMC
-    RA(1, I) = RA(1, I)/EPSX
-    RA(2, I) = RA(2, I)/EPSY
-    RA(3, I) = RA(3, I)/EPSZ
-  END DO
-
-  DO I = 1, NATOMC
-
-    IF (RA(1, I) .LT. 0.0) RA(1, I) = RA(1, I) + RBOX
-
-    IF (RA(2, I) .LT. 0.0) RA(2, I) = RA(2, I) + RBOX
-
-    IF (RA(3, I) .LT. 0.0) RA(3, I) = RA(3, I) + RBOX
-
-    IF (RA(1, I) .GE. RBOX) RA(1, I) = RA(1, I) - RBOX
-
-    IF (RA(2, I) .GE. RBOX) RA(2, I) = RA(2, I) - RBOX
-
-    IF (RA(3, I) .GE. RBOX) RA(3, I) = RA(3, I) - RBOX
-
-    IX = FLOOR(RA(1, I)/0.5D0)
-
-    IY = FLOOR(RA(2, I)/0.5D0)
-
-    IZ = FLOOR(RA(3, I)/0.5D0)
-
-    IF (IX .GE. NBOX) IX = IX - NBOX
-
-    IF (IY .GE. NBOX) IY = IY - NBOX
-
-    IF (IZ .GE. NBOX) IZ = IZ - NBOX
-
-    JX = IX + 1
-
-    JY = IY + 1
-
-    JZ = IZ + 1
-
-    IF (JX .GE. NBOX) JX = JX - NBOX
-
-    IF (JY .GE. NBOX) JY = JY - NBOX
-
-    IF (JZ .GE. NBOX) JZ = JZ - NBOX
-
-    IF (MOD(IX, 2) .EQ. 1) THEN
-
-      RX1 = IX
-
-      RX2 = JX
-
-    ELSE
-
-      RX1 = JX
-
-      RX2 = IX
-
-    END IF
-
-    IF (MOD(IY, 2) .EQ. 1) THEN
-
-      RY1 = IY
-
-      RY2 = JY
-
-    ELSE
-
-      RY1 = JY
-
-      RY2 = IY
-
-    END IF
-
-    IF (MOD(IZ, 2) .EQ. 1) THEN
-
-      RZ1 = IZ
-
-      RZ2 = JZ
-
-    ELSE
-
-      RZ1 = JZ
-
-      RZ2 = IZ
-
-    END IF
-
-    RX = PBC_DEFECT(DFLOAT(RX1)*0.5D0 - RA(1, I))
-
-    RY = PBC_DEFECT(DFLOAT(RY1)*0.5D0 - RA(2, I))
-
-    RZ = PBC_DEFECT(DFLOAT(RZ1)*0.5D0 - RA(3, I))
-
-    RS = RX*RX + RY*RY + RZ*RZ
-
-    IF (RS .LE. DECUT) THEN
-
-      J = FLOOR(DFLOAT(RX1)*0.5D0)*2*RBOX**2 &
-          + FLOOR(DFLOAT(RY1)*0.5D0)*2*RBOX &
-          + RZ1 + 1
-
-      TI(I) = TI(I) + 1
-
-      TV(J) = TV(J) + 1
-
-    END IF
-
-    RX = PBC_DEFECT(DFLOAT(RX2)*0.5D0 - RA(1, I))
-
-    RY = PBC_DEFECT(DFLOAT(RY2)*0.5D0 - RA(2, I))
-
-    RZ = PBC_DEFECT(DFLOAT(RZ2)*0.5D0 - RA(3, I))
-
-    RS = RX*RX + RY*RY + RZ*RZ
-
-    IF (RS .LE. DECUT) THEN
-
-      J = FLOOR(DFLOAT(RX2)*0.5D0)*2*RBOX**2 &
-          + FLOOR(DFLOAT(RY2)*0.5D0)*2*RBOX &
-          + RZ2 + 1
-
-      TI(I) = TI(I) + 1
-
-      TV(J) = TV(J) + 1
-
-    END IF
-
-  END DO
-
-      !!RESCALE ATOM POSITIONS TO ORIGINAL VALUES
-  DO I = 1, NATOMC
-    RA(1, I) = RA(1, I)*EPSX
-    RA(2, I) = RA(2, I)*EPSY
-    RA(3, I) = RA(3, I)*EPSZ
-  END DO
-
-END SUBROUTINE SINGLE_CRYSTAL_WS
-!***********************************************************************!
-SUBROUTINE POLY_CRYSTAL_WS
+SUBROUTINE WignerSeitzAnalysis
 
   USE OMP_LIB
   USE SYSTEM
   USE DEFECT
   USE MPI
   USE LMP_DRIVER
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
-  REAL*8 RX, RY, RZ, RS, RMIN, PBC
+  REAL*8 RX, RY, RZ, RS, RMIN, FACTOR, PBC
   INTEGER I, J, MIN, N, ATOM
   INTEGER IDHI, IDLO, RID
   INTEGER OCCBUFF(SIZE(OCC))
@@ -274,23 +93,29 @@ SUBROUTINE POLY_CRYSTAL_WS
   IF (RANK .eq. NPROCS - 1) IDHI = IDHI + MOD(NATOMC, NPROCS)
 
   CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
-  CALL MPI_BCAST(UPNEIGH, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), IERR)
 
-  IF (MOD(ISTEP - 1, 50) .EQ. 0 .and. UPNEIGH) CALL DEFECT_NEIGH_UPDATE(IDLO, IDHI)
+  CALL RFGRID%initBinGrid(30, 30, 30, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+  CALL RFGRID%assignAtomsToBins(RR, NATOMR)
 
   OC = 0
   OCC = 0
   OCCBUFF = 0
+  TVBUFF = 0
+  TIBUFF = 0
 
+  FACTOR = maxval((/epsx,epsy,epsz/),dim=1)
+  
 !!DETERMINE THE OCCUPANCY OF EACH SITE
 
-!$OMP PARALLEL PRIVATE(RS,RX,RY,RZ,RMIN,MIN,J,N,ATOM) SHARED(OC,OCC)
+!$OMP PARALLEL PRIVATE(RS,RX,RY,RZ,RMIN,RID,MIN,J,N,ATOM) SHARED(OC,OCC)
 !$OMP DO
   DO I = IDLO, IDHI
-
+    if (features%grains%grainOccupy(I) == 0) cycle
     RS = 0; RMIN = HUGE(RMIN); MIN = 0
-    DO J = 1, NNEIGH
-      RID = RNEIGH(J, I)
+    call RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I), 2.0D0*FACTOR)
+    if (RFGRID%singleListCount == 0) print *, RA(1, I), RA(2, I), RA(3, I)
+    DO J = 1, RFGRID%singleListCount
+      RID = RFGRID%singleNeighList(j)
       RX = PBC(RA(1, I) - RR(1, RID), 1)
       RY = PBC(RA(2, I) - RR(2, RID), 2)
       RZ = PBC(RA(3, I) - RR(3, RID), 3)
@@ -330,97 +155,23 @@ SUBROUTINE POLY_CRYSTAL_WS
 !$OMP END DO
 !$OMP END PARALLEL
 
+  ! Remove the grain boundary ints from defect list
+  do i = IDLO, IDHI
+    if (features%grains%grainOccupy(i) == 0)then
+      TI(i) = 1
+    end if
+  end do
+
   CALL MPI_REDUCE(TV, TVBUFF, SIZE(TV), MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
   CALL MPI_REDUCE(TI, TIBUFF, SIZE(TI), MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
 
-  IF (RANK .eq. 0) THEN
-    TV = TVBUFF
-    TI = TIBUFF
-  END IF
+  TV = TVBUFF
+  TI = TIBUFF
 
-END SUBROUTINE POLY_CRYSTAL_WS
-!***********************************************************************!
-SUBROUTINE DEFECT_NEIGH_UPDATE(LO, HI)
+  CALL MPI_BCAST(TV, SIZE(TV), MPI_INT, 0, lmpSystem%getCommunicator(), ierr)
+  CALL MPI_BCAST(TI, SIZE(TI), MPI_INT, 0, lmpSystem%getCommunicator(), ierr)
 
-  USE SYSTEM
-  USE DEFECT
-  USE BINS, ONLY: maxNeighborSize
-
-  IMPLICIT NONE
-
-  !LO & HI ARE THE IDS FOR WHICH NEIGH LIST WILL BE UPDATED FOR
-  INTEGER :: LO, HI
-  INTEGER :: I, J
-  REAL*8 :: RX, RY, RZ, RS, PBC
-  REAL*8 START, FINISH
-  REAL*8 :: RSLIST(NNEIGH)
-  INTEGER :: RFNEIGH(maxNeighborSize)
-  if (rank .eq. 0) WRITE (*, '(a)') 'Updating defect neighbor lists'
-
-  UPNEIGH = .FALSE.
-
-  CALL CPU_TIME(START)
-
-  RX = 0; RY = 0; RZ = 0; RS = 0
-  RSLIST = 0; RNEIGH = 0
-
-  IF (.NOT. RFGRID%isInitialized) THEN
-    CALL RFGRID%initBinGrid(40, 40, 40, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
-    CALL RFGRID%assignAtomsToBins(RR, NATOMR)
-  END IF
-
-  !FOR EACH ATOM IN THE SYSTEM FIND N NEAREST REFERENCE ATOMS
-  DO I = LO, HI
-    RSLIST = HUGE(RS)
-    call RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I), 1.2D0)
-    RFNEIGH = RFGRID%singleNeighList
-    J = 1
-    DO WHILE (RFNEIGH(J) .NE. 0 .AND. J .LE. SIZE(RFNEIGH))
-      RX = PBC(RA(1, I) - RR(1, RFNEIGH(J)), 1)
-      RY = PBC(RA(2, I) - RR(2, RFNEIGH(J)), 2)
-      RZ = PBC(RA(3, I) - RR(3, RFNEIGH(J)), 3)
-      RS = RX*RX + RY*RY + RZ*RZ
-      IF (RS .lt. RSLIST(NNEIGH)) THEN
-        RSLIST(NNEIGH) = RS
-        RNEIGH(NNEIGH, I) = RFNEIGH(J)
-        CALL quicksort(RSLIST, RNEIGH(:, I), 1, NNEIGH)
-      END IF
-      J = J + 1
-    END DO
-  END DO
-
-  CALL CPU_TIME(FINISH)
-  IF (RANK .eq. NPROCS - 1) WRITE (*, '(a,f14.5,a)') 'Neighbor list update time= ', FINISH - START, ' s'
-
-END SUBROUTINE DEFECT_NEIGH_UPDATE
-!***********************************************************************!
-recursive subroutine quicksort(a, b, first, last)
-  ! This quicksort routine sorts both a and b arrays based on the values in a
-  implicit none
-  real*8 a(*), x, t
-  integer b(*)
-  integer first, last
-  integer i, j
-
-  x = a((first + last)/2)
-  i = first
-  j = last
-  do
-    do while (a(i) .lt. x)
-      i = i + 1
-    end do
-    do while (x .lt. a(j))
-      j = j - 1
-    end do
-    if (i .ge. j) exit
-    t = a(i); a(i) = a(j); a(j) = t
-    t = b(i); b(i) = b(j); b(j) = t
-    i = i + 1
-    j = j - 1
-  end do
-  if (first .lt. i - 1) call quicksort(a, b, first, i - 1)
-  if (j + 1 .lt. last) call quicksort(a, b, j + 1, last)
-end subroutine quicksort
+END SUBROUTINE WignerSeitzAnalysis
 !***********************************************************************!
 recursive subroutine quicksort_int(array1, array2, lo, hi)
     implicit none
@@ -540,6 +291,7 @@ END SUBROUTINE OVITO
 SUBROUTINE BASIC_DAMAGE(NFRKL)
 
   USE SYSTEM, ONLY: RA, NATOMC, RANK, DECUT, TDAM
+  USE MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -571,9 +323,11 @@ SUBROUTINE BASIC_DAMAGE(NFRKL)
       ID = CEILING(RND*NATOMC)
       IF (ID .EQ. 0) ID = 1
 
+      ! Do not insert chosen atom if it already is in the list
+      ! or if it grain boundary atom
       INSERT = .TRUE.
       DO J = 1, N - 1
-        IF (ID .EQ. MOVEID(J)) INSERT = .FALSE.
+        IF (ID .EQ. MOVEID(J) .or. features%grains%grainOccupy(ID) == 0) INSERT = .FALSE.
       END DO
       IF (INSERT) THEN
         MOVEID(N) = ID
@@ -616,12 +370,16 @@ SUBROUTINE CREATE_VACANCIES(NFRKL, IDS)
   USE SYSTEM
   USE LMP_DRIVER
   USE MPI
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
   INTEGER :: I, NFRKL
   INTEGER :: IDS(NFRKL)
   CHARACTER(LEN=10) :: IDSTR
+
+  INTEGER :: ONATOMC
+  REAL*8, DIMENSION(3,NATOMC) :: ORA
 
   CALL MPI_BCAST(IDS, NFRKL, MPI_INT, 0, lmpSystem%getCommunicator(), IERR)
 
@@ -632,11 +390,53 @@ SUBROUTINE CREATE_VACANCIES(NFRKL, IDS)
   END DO
   CALL lammps_command(lmpSystem%getLammpsPtr(), 'delete_atoms group deleteList')
 
+  ONATOMC = NATOMC
+  ORA = RA
+
   !Upadate all other processes on changed parameters
   NATOMC = int(lammps_get_natoms(lmpSystem%getLammpsPtr()))
   call lmpSystem%getPositions
 
+  !Fix grain assignment since ordering got messed up
+  call grainAssignmentFix(ORA,ONATOMC)
+
 END SUBROUTINE CREATE_VACANCIES
+!***********************************************************************!
+SUBROUTINE grainAssignmentFix(OLDPOS, OLDC)
+
+  USE SYSTEM
+  USE MicroStrucFeatures
+  USE BINS
+
+  IMPLICIT NONE
+
+  INTEGER, INTENT(IN) :: OLDC
+  REAL*8, DIMENSION(3,OLDC), INTENT(IN) :: OLDPOS
+
+  INTEGER :: I,J,K
+  INTEGER, DIMENSION(OLDC) :: OGA ! OLD GRAIN ASSIGNMENTS
+  TYPE(BinGrid) :: BG
+
+  OGA = features%grains%grainOccupy
+
+  CALL BG%initBinGrid(30, 30, 30, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+  CALL BG%assignAtomsToBins(OLDPOS, OLDC)
+
+  DO I=1,NATOMC
+
+    CALL BG%getNearestNeighbors(RA(1,I),RA(2,I),RA(3,I),1.0D0)
+    DO J = 1, BG%singleListCount
+      K = BG%singleNeighList(J)
+      IF (norm2(RA(:,I)-OLDPOS(:,K)) < 0.01) THEN
+        features%grains%grainOccupy(i) = OGA(k)
+        if (OGA(k) > 3 .and. rank == 0) print *, OGA(k), k
+        exit
+      END IF
+    END DO
+
+  END DO
+
+END SUBROUTINE grainAssignmentFix
 !***********************************************************************!
 SUBROUTINE FRENKEL_POS_UPDATE(POS, THRESH)
 
@@ -733,12 +533,9 @@ SUBROUTINE MD_DPA
   IF (TDAM .EQ. 1) THEN
     DTIME = AVDPA/DRATE
     DPA = DPA + NEWDSP/NATOMC
-  ELSE IF (TDAM .EQ. 2) THEN
+  ELSE IF (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
     DTIME = (FLOAT(NFREKL)/FLOAT(NATOMC))/DRATE
-    DPA = DPA + (NFREKL/NATOMC)
-  ELSE IF (TDAM .EQ. 3) THEN
-    DTIME = HUGE(DTIME)
-    DPA = 0
+    DPA = DPA + (FLOAT(NFREKL)/FLOAT(NATOMC))
   END IF
 
   !ADD AVERAGE DPA PER CASCADE TO CURRENT DPA VALUE
@@ -818,3 +615,92 @@ SUBROUTINE RESTART
   END IF
 
 END SUBROUTINE
+!***********************************************************************!
+SUBROUTINE DEFECT_PRINT(DEFECTLIST, NDEFECTS)
+
+  USE SYSTEM, ONLY: NDEMAX
+
+  IMPLICIT NONE
+
+  REAL*8 :: DEFECTLIST(7, NDEMAX)
+  INTEGER :: NDEFECTS
+
+  INTEGER :: I, J
+  INTEGER :: INTSIZES(MAXVAL(INT(DEFECTLIST(6, :)))), VACSIZES(ABS(MINVAL(INT(DEFECTLIST(6, :)))))
+  INTEGER :: INTCLUSTERCOUNTS(MAXVAL(INT(DEFECTLIST(6, :)))), VACCLUSTERCOUNTS(ABS(MINVAL(INT(DEFECTLIST(6, :)))))
+  INTEGER :: INTCOUNT, VACCOUNT
+  CHARACTER(LEN=20) :: PRINTFORMAT
+
+  INTCOUNT = 0; VACCOUNT = 0
+  INTCLUSTERCOUNTS = 0; VACCLUSTERCOUNTS = 0
+
+  !DETERMINE WHAT CLUSTER SIZES TO PRINT IN THE TABLE
+  DO I = 1, NDEFECTS
+    IF (.NOT. ANY(INTSIZES == INT(DEFECTLIST(6, I))) .AND. INT(DEFECTLIST(6, I)) > 0) THEN
+      INTSIZES(INTCOUNT + 1) = INT(DEFECTLIST(6, I))
+      INTCOUNT = INTCOUNT + 1
+    ELSE IF (.NOT. ANY(VACSIZES == INT(DEFECTLIST(6, I))) .AND. INT(DEFECTLIST(6, I)) < 0) THEN
+      VACSIZES(VACCOUNT + 1) = INT(DEFECTLIST(6, I))
+      VACCOUNT = VACCOUNT + 1
+    END IF
+  END DO
+
+  ! DETERMINE THE COUNT FOR EACH DEFECT SIZE
+  DO I = 1, NDEFECTS
+    IF (DEFECTLIST(6, I) > 0) THEN
+      DO J = 1, INTCOUNT
+        IF (INT(DEFECTLIST(6, I)) == INTSIZES(J)) THEN
+          INTCLUSTERCOUNTS(J) = INTCLUSTERCOUNTS(J) + 1
+        END IF
+      END DO
+    ELSE
+      DO J = 1, VACCOUNT
+        IF (INT(DEFECTLIST(6, I)) == VACSIZES(J)) THEN
+          VACCLUSTERCOUNTS(J) = VACCLUSTERCOUNTS(J) + 1
+        END IF
+      END DO
+    END IF
+  END DO
+
+  ! SORT THE DEFECT LISTS
+  CALL QUICKSORT_INT(INTSIZES, INTCLUSTERCOUNTS, 1, INTCOUNT)
+  CALL QUICKSORT_INT(VACSIZES, VACCLUSTERCOUNTS, 1, VACCOUNT)
+
+  PRINTFORMAT = '(X,I4,X)'
+
+  !WRITE THE INT TABLE
+  IF (INTCOUNT > 0) THEN
+
+    WRITE (*, '(A9)', ADVANCE="NO") 'Int Size|'
+    DO I = 1, INTCOUNT
+      WRITE (*, PRINTFORMAT, ADVANCE="NO") INTSIZES(I)
+    END DO
+    WRITE (*, *) !NEWLINE
+
+    WRITE (*, '(A9)', ADVANCE="NO") 'Count|'
+    DO I = 1, INTCOUNT
+      WRITE (*, PRINTFORMAT, ADVANCE="NO") INTCLUSTERCOUNTS(I)
+    END DO
+    WRITE (*, *) !NEWLINE
+    WRITE (*, *) !NEWLINE
+
+  END IF
+
+  !WRITE THE VAC TABLE
+  IF (VACCOUNT > 0) THEN
+
+    WRITE (*, '(A9)', ADVANCE="NO") 'Vac Size|'
+    DO I = VACCOUNT, 1, -1
+      WRITE (*, PRINTFORMAT, ADVANCE="NO") VACSIZES(I)
+    END DO
+    WRITE (*, *) !NEWLINE
+
+    WRITE (*, '(A9)', ADVANCE="NO") 'Count|'
+    DO I = VACCOUNT, 1, -1
+      WRITE (*, PRINTFORMAT, ADVANCE="NO") VACCLUSTERCOUNTS(I)
+    END DO
+    WRITE (*, *) !NEWLINE
+    WRITE (*, *) !NEWLINE
+
+  END IF
+END SUBROUTINE DEFECT_PRINT

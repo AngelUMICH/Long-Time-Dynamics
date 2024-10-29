@@ -884,6 +884,7 @@ contains !! Wrapper functions local to this module {{{1
       type (C_ptr) :: Cptr
       type (C_ptr), pointer, dimension(:) :: Ccompute
       integer :: nr, nc
+      integer (C_int), pointer :: nelements
       ! Check for the correct dimensionality
       if ( type == 0 ) then
          call lammps_error_all (ptr, FLERR, 'You cannot extract a compute&
@@ -895,6 +896,8 @@ contains !! Wrapper functions local to this module {{{1
          return
       end if
       call lammps_extract_compute_arraysize (ptr, id, style, nr, nc)
+      call lammps_extract_global_i (nelements, ptr, 'nlocal')
+      nr = nelements
       Cptr = lammps_extract_compute_Cptr (ptr, id, style, type)
       call C_F_pointer (Cptr, Ccompute, (/nr/))
       ! Note that the matrix is transposed, from Fortran's perspective

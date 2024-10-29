@@ -4,8 +4,8 @@ LMPLIB = /home/chavange/Software/lammps/build/liblammps_linux.a
 LMPCWRAP = ./LAMMPS-wrapper.o
 LMPFLIB = ./LAMMPS.o
 
-OBJS = LAMMPS.o LAMMPS-wrapper.o BINS.o DEFINE.o LMP.o QUEUE.o HELPER.o PTM.o GRAIN.o FEAT.o INIT.o FUNCT.o DIMER.o MAIN.o AKMC.o
-FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form #-Wall -fcheck=all
+OBJS = LAMMPS.o LAMMPS-wrapper.o BINS.o DEFINE.o LMP.o QUEUE.o HELPER.o PTM.o GRAIN.o REFLAT.o FEAT.o INIT.o FUNCT.o DIMER.o MAIN.o AKMC.o
+FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form #-fcheck=all
 LIBS = -lgomp -lstdc++ -lm -ldl
 
 opld: $(OBJS)
