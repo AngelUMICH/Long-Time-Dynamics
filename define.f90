@@ -1,14 +1,3 @@
-!***********************************************************************!
-!***********************************************************************!
-!***       SELF EVOLVING ATOMISTIC KINETIC MONTE CARLO CODE          ***!
-!***                        AUTHOR:XU,HAIXUAN                        ***!
-!***             MATERIALS SCIENCE AND TECHNOLOGY DIVISION           ***!
-!***                      OAK RIDGE NATIONAL LAB                     ***!
-!***                          XUH1@ORNL.GOV                          ***!
-!***                           VERSION 2.0                           ***!
-!***                       ALL RIGHTS RESERVED                       ***!
-!***********************************************************************!
-!***********************************************************************!
 !!SYSTEM VARIABLES:GLOBAL VARIABLES
 
 MODULE SYSTEM
@@ -234,16 +223,4 @@ MODULE KMCVAR
   REAL*8, ALLOCATABLE, DIMENSION(:) :: FQ, EM, EMBUFF, OE
 
 END MODULE KMCVAR
-!***********************************************************************!
-
-!***********************************************************************!
-!***********************************************************************!
-!***       SELF EVOLVING ATOMISTIC KINETIC MONTE CARLO CODE          ***!
-!***                        AUTHOR:XU,HAIXUAN                        ***!
-!***             MATERIALS SCIENCE AND TECHNOLOGY DIVISION           ***!
-!***                      OAK RIDGE NATIONAL LAB                     ***!
-!***                          XUH1@ORNL.GOV                          ***!
-!***                           VERSION 2.0                           ***!
-!***                       ALL RIGHTS RESERVED                       ***!
-!***********************************************************************!
 !***********************************************************************!
