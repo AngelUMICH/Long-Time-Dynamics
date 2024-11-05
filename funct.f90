@@ -1,16 +1,3 @@
-!***********************************************************************!
-!***********************************************************************!
-!***          SELF EVOLVING ATOMISTIC KINETIC MONTE CARLO CODE       ***!
-!***                        AUTHOR:XU,HAIXUAN                        ***!
-!***             MATERIALS SCIENCE AND TECHNOLOGY DIVISION           ***!
-!***                      OAK RIDGE NATIONAL LAB                     ***!
-!***                          XUH1@ORNL.GOV                          ***!
-!***                           VERSION 3.0                           ***!
-!***                       ALL RIGHTS RESERVED                       ***!
-!***********************************************************************!
-!***********************************************************************!
-
-!***********************************************************************!
 !!APPLY THE PERIODIC BOUNDARY CONDITION TO THE SYSTEM
 REAL*8 FUNCTION PBC(X, DIM)
 
