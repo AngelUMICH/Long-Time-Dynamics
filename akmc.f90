@@ -182,6 +182,9 @@ SUBROUTINE OPT
 
       WRITE (*, '(A,2I12,2F14.5,4E14.5,E14.5)') 'ITR', ISTEP, EID, EM(EID), &
         ENCALC, TIME, PRESS(1), PRESS(2), PRESS(3), DPA
+
+      WRITE(*,*)
+
     END IF
 
   END IF
@@ -194,7 +197,7 @@ SUBROUTINE OPT
 
   RETURN
 
-END SUBROUTINE
+END SUBROUTINE OPT
 
 !***********************************************************************!
 !THIS SUBROUTINE IS TO IDENTIFY DEFECT CLUSTERS IN THE SYSTEM
@@ -204,6 +207,7 @@ END SUBROUTINE
 SUBROUTINE DCIDNT
   USE SYSTEM
   USE DEFECT
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -675,7 +679,11 @@ SUBROUTINE DCIDNT
 
   END DO
 
-  IF (MOD(ISTEP, NFREQ) .EQ. 0) CALL DEFECT_PRINT(PX, NDTOT)
+  IF (MOD(ISTEP, NFREQ) .EQ. 0) then
+    CALL DEFECT_PRINT(PX, NDTOT)
+    CALL features%defects%printBanned()
+  END IF
+
   CALL FLUSH (6)
 
   NDSTOT = MAX(sumInt, sumVac)
@@ -710,6 +718,7 @@ SUBROUTINE DFSEL
   USE SYSTEM
   USE DEFECT
   USE KMCVAR
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -726,15 +735,15 @@ SUBROUTINE DFSEL
   allocate (pj(1:2, 1:ndtot))
 
   do i = 1, ndtot
+
+    if (features%defects%isBanned(PX(1,i),PX(2,i),PX(3,i))) cycle
+
     j = int(abs(px(6, i)))
     if (px(6, i) .lt. 0) then
       k = 1 !VACS
     else
       k = 2 !INTS
     end if
-
-    !if only vacancies then skip ints
-    if (tdam == 3 .and. k == 2) cycle
 
     if (j .lt. 50) then
       pj(k, i) = 1.0D12*exp(-emig(k, j)/kb/temp)
@@ -755,14 +764,15 @@ SUBROUTINE DFSEL
   sump = 0.0
 
   do i = 1, ndtot
+
+    if (features%defects%isBanned(PX(1,i),PX(2,i),PX(3,i))) cycle
+
     j = int(abs(px(6, i)))
     if (px(6, i) .lt. 0) then
       k = 1
     else
       k = 2
     end if
-
-    if (tdam == 3 .and. k == 2) cycle
 
     sump = sump + pj(k, i)*scalef
     if (sump .ge. prop) exit
@@ -809,12 +819,15 @@ SUBROUTINE KMC
   USE DEFECT
   USE MPI
   USE LMP_DRIVER
+  USE MicroStrucFeatures
 
   IMPLICIT NONE
 
   INTEGER I, K, jmapsz
 
   REAL*8 RND, dt, scalef, prop, TOTFQSUM
+
+  logical ban
 
   CHARACTER(LEN=40) STR
 
@@ -905,6 +918,20 @@ SUBROUTINE KMC
 
   END IF
 
+  ! If defect had no significant energy barriers ban that defect
+  ban = .true.
+  do i = 1, NDIMER
+    if (EM(i) > 1e-3 .and. EM(i) < 10.0D0) ban = .false.
+  end do
+
+  call MPI_BCAST(ban, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), ierr)
+
+  if (ban) then
+    call features%defects%banDefect(PX(1,1),PX(2,1),PX(3,1))
+    if (rank == 0) write(*,'(A,3F14.5)') 'Banned defect at: ', PX(1,1),PX(2,1),PX(3,1)
+  end if
+
+  ! Update important data to all procs
   CALL MPI_BCAST(TIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
 
   CALL MPI_BCAST(DTIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
@@ -921,6 +948,7 @@ SUBROUTINE DOSE
 
   USE SYSTEM
   USE LMP_DRIVER
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -955,6 +983,8 @@ SUBROUTINE DOSE
     TIME_LAST = TIME
 
     IF (RANK == 0) CALC = .TRUE.
+
+    call features%defects%clearBanList()
 
   END IF
 
