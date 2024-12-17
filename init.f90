@@ -243,6 +243,7 @@ SUBROUTINE READ_RESTART
   USE SYSTEM
   USE DEFECT
   USE LMP_DRIVER
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -268,13 +269,17 @@ SUBROUTINE READ_RESTART
 
     OPEN (UNIT=27, FILE='RESTART.OUT')
 
-    !READ POSITIONS
+    !Read positions and grain assignments
 
     READ (27, *) NATOMC
 
+    !Initialize grains object
+    
+    call features%grains%allocateClusterArray(NATOMC)
+
     DO I = 1, NATOMC
 
-      READ (27, '(3F14.5)') (RA(J, I), J=1, 3)
+      READ (27, '(3F14.5, I5)') (RA(J, I), J=1, 3), features%grains%grainOccupy(I)
 
     END DO
 
