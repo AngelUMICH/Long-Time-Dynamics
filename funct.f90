@@ -540,6 +540,7 @@ SUBROUTINE RESTART
 
   USE SYSTEM
   USE DEFECT
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -551,8 +552,9 @@ SUBROUTINE RESTART
 
     IF (MOD(ISTEP, 1000) .EQ. 0) THEN
 
-      WRITE (FILENAME, '(A17, I0, A4)') './RESTART/RESTART', &
-        ISTEP, '.OUT'
+      ! Write all per-atom data positions and grain assignments
+
+      WRITE (FILENAME, '(A17, I0, A4)') './RESTART/RESTART', ISTEP, '.OUT'
 
       OPEN (UNIT=27, FILE=TRIM(FILENAME))
 
@@ -560,7 +562,7 @@ SUBROUTINE RESTART
 
       DO I = 1, NATOMC
 
-        WRITE (27, '(3F14.5)') (RA(J, I), J=1, 3)
+        WRITE (27, '(3F14.5, I5)') (RA(J, I), J=1, 3), features%grains%grainOccupy(I)
 
       END DO
 
