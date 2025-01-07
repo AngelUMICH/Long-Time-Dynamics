@@ -334,7 +334,7 @@ SUBROUTINE READ_RESTART
       END DO
 
       !Change the simualtion dimensions with corresponding strain
-      write (str, '(A,F10.8,A,F10.8,A,F10.8)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
+      write (str, '(A,F15.10,A,F15.10,A,F15.10)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
       if (rank .eq. 0) print *, 'change_box all '//trim(str)//' units lattice'
       call lammps_command(lmpSystem%getLammpsPtr(), 'change_box all '//trim(str)//' units lattice')
       call lammps_command( lmpDimer%getLammpsPtr(), 'change_box all '//trim(str)//' units lattice')
