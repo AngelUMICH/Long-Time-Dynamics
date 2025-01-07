@@ -36,6 +36,7 @@ SUBROUTINE SPS
 
   USE CLASS_DIMER
   USE LMP_DRIVER
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -60,7 +61,13 @@ SUBROUTINE SPS
 
   SR_LEN = SIZE(SR)
 
-  !BEFORE WE SEARCH WE NEED TO UPDATE SOME IMPORTANT INFO IN ALL PROCESSES
+  !TODO Eliminate obtaining info from features to put in px
+  if (rank .eq. 0) then
+    px(1,1) = features%defects%selectedCluster%comx
+    px(2,1) = features%defects%selectedCluster%comy
+    px(3,1) = features%defects%selectedCluster%comz
+    px(4,1) = features%defects%selectedCluster%radiusAV
+  end if
 
   CALL MPI_BCAST(RA, RA_LEN, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
 
@@ -68,48 +75,42 @@ SUBROUTINE SPS
 
   CALL MPI_BCAST(PX, 7*NDEMAX, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
 
-  !IF THE AV REQUIRES SADDLE POINT SEARCHING
+  !CARRY OUT SADDLE POINT SEARCHING
 
-  IF ((PX(5, 1) .NE. 0.0D0) .AND. (PX(6, 1) .NE. 0.0D0)) THEN
+  DO J = LDIMERI, UDIMERI
 
-    !CARRY OUT SADDLE POINT SEARCHING
+    CALL DIMER_INIT(ADIMER, PX(1, 1), PX(2, 1), PX(3, 1), PX(4, 1), lmpDimer)
 
-    DO J = LDIMERI, UDIMERI
+    CALL DIMER_SEARCH(ADIMER)
 
-      CALL DIMER_INIT(ADIMER, PX(1, 1), PX(2, 1), PX(3, 1), PX(4, 1), lmpDimer)
+    !STORE INFORMATION,EM:MIGRATION ENERGY BARRIER
+    !ND:TOTAL NUMBER OF ATOMS IN THE AV
 
-      CALL DIMER_SEARCH(ADIMER)
+    IF (lmpDimer%getRank() .EQ. 0) THEN
+      ND(J) = ADIMER%NATOM1
+      EM(J) = ADIMER%EMDIFF
+    
 
-      !STORE INFORMATION,EM:MIGRATION ENERGY BARRIER
-      !ND:TOTAL NUMBER OF ATOMS IN THE AV
+      !STORE THE SADDLE POINT CONFIGURATION,SR:POSITION OF SADDLE POINT
 
-      IF (lmpDimer%getRank() .EQ. 0) THEN
-        ND(J) = ADIMER%NATOM1
-        EM(J) = ADIMER%EMDIFF
-      
+      DO K = 1, ND(J)
 
-        !STORE THE SADDLE POINT CONFIGURATION,SR:POSITION OF SADDLE POINT
+        SR(1, K, J) = ADIMER%SX(1, K)
+        SR(2, K, J) = ADIMER%SX(2, K)
+        SR(3, K, J) = ADIMER%SX(3, K)
+        SR(4, K, J) = ADIMER%SI(1, K)
 
-        DO K = 1, ND(J)
+      END DO
 
-          SR(1, K, J) = ADIMER%SX(1, K)
-          SR(2, K, J) = ADIMER%SX(2, K)
-          SR(3, K, J) = ADIMER%SX(3, K)
-          SR(4, K, J) = ADIMER%SI(1, K)
+    END IF
 
-        END DO
+    IF (MOD(ISTEP, NFREQ) .EQ. 0 .AND. lmpDimer%getRank() .EQ. 0) THEN
+      WRITE (*, '(A,1I12,F14.5)') 'SPS', J, EM(J)
+    END IF
 
-      END IF
+    CALL DIMER_FINISH(ADIMER)
 
-      IF (MOD(ISTEP, NFREQ) .EQ. 0 .AND. lmpDimer%getRank() .EQ. 0) THEN
-        WRITE (*, '(A,1I12,F14.5)') 'SPS', J, EM(J)
-      END IF
-
-      CALL DIMER_FINISH(ADIMER)
-
-    END DO
-
-  END IF
+  END DO
 
   !GATHER RESULTS ON MAIN RANK
   CALL MPI_REDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
@@ -201,494 +202,112 @@ END SUBROUTINE OPT
 
 !***********************************************************************!
 !THIS SUBROUTINE IS TO IDENTIFY DEFECT CLUSTERS IN THE SYSTEM
-! Gao -2021
-! Modified: Angel Chavira 9/1/2022
 
 SUBROUTINE DCIDNT
-  USE SYSTEM
-  USE DEFECT
+  use SYSTEM
+  use DEFECT
   use MicroStrucFeatures
 
-  IMPLICIT NONE
+  implicit none
 
-  INTEGER I, J, NTEMP
+  integer i,j
+  integer :: sumInt, sumVac
 
-  REAL*8 RX, RY, RZ, PBC, PTEMP(7, NDEMAX)
-  double precision :: dr
-  integer, allocatable, dimension(:) :: idnewdef
-  integer :: newdef, nvac1, nint1, sumInt, sumVac
-  integer :: k, l, m, n, itf
-  integer, allocatable, dimension(:) :: Neighbor
-  integer, allocatable, dimension(:, :) :: NNeighbor
-  integer, allocatable, dimension(:) :: iicn, iiticn
-  integer :: iticn, icn, ijpcx, ijpcy, ijpcz, comdc
-
-  OPEN (13, file='defecttemp.dat', status='replace')
-
-  PTEMP = 0.0D0
-
-!OUTPUT INITIAL DEFECTS WITH FILE INDEX 000
-  IF (ISTEP .EQ. 1) THEN
-
+  if (ISTEP .eq. 1) then
     ISTEP = 0
-    CALL OVITO
+    call OVITO
     ISTEP = 1
-
-  END IF
-
-!INITIALIZATION,ND:NUMBER OF DEFECTS
-!VAC:VACANCY,INT:INTERSTITIAL
+  end if
 
   NDVAC = 0
   NDINT = 0
-
-!INDEX FOR INTERSTITIAL AND VACACNY
-
   II = 0
   IV = 0
 
 !IDENTIFY INTERSTITIAL,PI:POSITION OF INTERSITITAL
 
-  DO I = 1, NATOMC
-    IF (TI(I) .NE. 1) THEN
+  do i = 1, NATOMC
+
+    if (TI(i) .ne. 1) then
       NDINT = NDINT + 1
-      II(1, NDINT) = I
-      PI(1, NDINT) = RA(1, I)
-      PI(2, NDINT) = RA(2, I)
-      PI(3, NDINT) = RA(3, I)
-    END IF
-  END DO
+      II(1, NDINT) = i
+      PI(1, NDINT) = RA(1, i)
+      PI(2, NDINT) = RA(2, i)
+      PI(3, NDINT) = RA(3, i)
+    end if
+  end do
 
 !IDENTIFY VACANCY,PV:POSITION OF VACANCY
 
-  DO J = 1, NATOMR
-    IF (TV(J) .NE. 1) THEN
+  do j = 1, NATOMR
+
+    if (TV(j) .ne. 1) then
       NDVAC = NDVAC + 1
       IV(1, NDVAC) = J
       PV(1, NDVAC) = RR(1, J)
       PV(2, NDVAC) = RR(2, J)
       PV(3, NDVAC) = RR(3, J)
-    END IF
-  END DO
+    end if
+  end do
 
   NDTOT = 0
 
-!COUNT TOTAL NUMBER OF DEFECTS AND DETERMINE THEIR POSITION
-
-  DO I = 1, NDINT
+  do i = 1, NDINT
 
     NDTOT = NDTOT + 1
-
-    PX(1, NDTOT) = PI(1, I)
-    PX(2, NDTOT) = PI(2, I)
-    PX(3, NDTOT) = PI(3, I)
-
-    PX(4, NDTOT) = 4.2D0 !radius of interstitial AV
-    PX(5, NDTOT) = 1.0D0 !TELLS IF IN NEED OF SADDLE SEARCHES
-    PX(6, NDTOT) = 1.0D0 !THIS MEANS IT IS A INTERSTITIAL
-
-    PX(7, NDTOT) = II(1, I)
-
-  END DO
-
-  DO J = 1, NDVAC
-
-    NDTOT = NDTOT + 1
-
-    PX(1, NDTOT) = PV(1, J)
-    PX(2, NDTOT) = PV(2, J)
-    PX(3, NDTOT) = PV(3, J)
-
-    PX(4, NDTOT) = 2.7D0 !radius of vacancy AV
-    PX(5, NDTOT) = 1.0D0 !TELLS IF IN NEED OF SADDLE SEARCHES
-    PX(6, NDTOT) = -1.0D0 !THIS MEANS IT IS A VACANCY
-
-    PX(7, NDTOT) = IV(1, J)
-
-  END DO
-
-  ! print *, ndtot, NDVAC, NDINT
-
-  allocate (Neighbor(1:NDTOT))
-  allocate (NNeighbor(1:NDTOT, 1:NDTOT))
-
-!DETERMINE THE REAL DEFECTS
-
-  DO I = 1, NDTOT
-
-    Neighbor(i) = 0
-    Neighbor(i) = Neighbor(i) + 1
-    NNeighbor(i, Neighbor(i)) = i
-
-    DO J = 1, NDTOT
-
-      IF (i == j) CYCLE
-      RX = PBC(PX(1, I) - PX(1, J), 1)
-      RY = PBC(PX(2, I) - PX(2, J), 2)
-      RZ = PBC(PX(3, I) - PX(3, J), 3)
-
-      dr = sqrt(RX*RX + RY*RY + RZ*RZ)
-
-      IF (PX(6, I) > 0.0) THEN
-        if (dr .LT. 1.200D0) then
-          Neighbor(i) = Neighbor(i) + 1
-          NNeighbor(i, Neighbor(i)) = j
-        end if
-
-      ELSEIF (PX(6, I) < 0.0) THEN                   !atom i is a vac
-        if (PX(6, J) < 0.0) then                     !atom j is a vac
-          if (dr .lt. 0.95) then
-            Neighbor(i) = Neighbor(i) + 1
-            NNeighbor(i, Neighbor(i)) = j
-          end if
-        end if
-
-        if (PX(6, J) > 0.0) then                     !atom j is a int
-          if (dr .le. 1.200d0) then
-            Neighbor(i) = Neighbor(i) + 1
-            NNeighbor(i, Neighbor(i)) = j
-          end if
-        end if
-      END IF
-
-    END DO
-  END DO
-
-  nvac1 = 0
-  nint1 = 0
-
-  DO i = 1, NDTOT
-    IF (Neighbor(i) == 1) THEN
-      if (PX(6, I) < 0.0) then
-        nvac1 = nvac1 + 1
-      elseif (PX(6, I) > 0.0) then
-        nint1 = nint1 + 1
-      end if
-    END IF
-  END DO
-
-!******** END write single vac and single int to result.dat
-!******** left defects after remove single defect
-  newdef = NDTOT - nvac1 - nint1
-
-  DO I = 1, NDTOT
-
-    if (Neighbor(i) .gt. 1) then
-      write (13, "(i8)") i
-    end if
-
-  END DO
-
-!********  now find clusters
-! DO WHILE
-
-  do while (newdef > 0)
-
-    if (newdef > 0) then
-      REWIND (13)
-      allocate (idnewdef(1:newdef))
-
-      do i = 1, newdef
-        read (13, *) idnewdef(i)
-      end do
-
-      close (13)
-    end if
-
-    allocate (iicn(1:100*newdef))
-    allocate (iiticn(1:100*newdef))
-
-    icn = 0
-    iicn = 0
-
-    DO i = 1, Neighbor(idnewdef(1))
-      icn = icn + 1
-      iicn(icn) = NNeighbor(idnewdef(1), i)
-    END DO
-
-!       DO i=1,10  !add this cycle to make sure find all belong to CL
-    DO i = 1, 4  !add this cycle to make sure find all belong to CL
-      DO j = 2, newdef
-
-        n = 0
-
-        do k = 1, Neighbor(idnewdef(j))  ! J neighbor number
-          do l = 1, icn
-            if (NNeighbor(idnewdef(j), k) == iicn(l)) then
-!*****************************************************************
-! If any of J int or J neighbor ints is the neighbor of current 1*
-! int, all the neighbors of J int belong to 1 cluster.           *
-!*****************************************************************
-              n = 1
-            end if
-          end do
-        end do
-
-        IF (n == 1) THEN
-          do m = 1, Neighbor(idnewdef(j))
-            icn = icn + 1
-            iicn(icn) = NNeighbor(idnewdef(j), m)
-          end do
-        END IF
-
-      END DO
-    END DO
-
-    iticn = 0
-    iiticn = 0
-
-!*****************************************************************
-! Delete the interstitial that was repeated many times due to    *
-! the above loop - DO i=1,10                                     *
-! iticn - number of defects in the current 1 cluster             *
-! iiticn - remeber defect index in the current 1 cluster         *
-!*****************************************************************
-
-    do j = 1, icn
-      itf = 0
-      IF (j == 1) THEN
-        iticn = iticn + 1
-        iiticn(iticn) = iicn(j)
-      ELSE
-        do k = 1, iticn
-          if (iicn(j) == iiticn(k)) then
-            itf = 1
-          end if
-        end do
-        if (itf == 0) then
-          iticn = iticn + 1
-          iiticn(iticn) = iicn(j)
-        end if
-      END IF
-    end do
-
-! we need to make chnage in PX(5,I) and PX(6,J)
-    ijpcx = 0
-    ijpcy = 0
-    ijpcz = 0
-
-    do K = 2, iticn
-
-      I = iiticn(1)
-      J = iiticn(K)
-
-      if ((px(1, i) < 1.0 .or. px(1, j) > rbox*EPSX - 1.0) .or. &
-          (px(1, j) < 1.0 .or. px(1, i) > rbox*EPSX - 1.0)) then
-        ijpcx = 1
-      end if
-
-      if ((px(2, i) < 1.0 .or. px(2, j) > rbox*EPSY - 1.0) .or. &
-          (px(2, j) < 1.0 .or. px(2, i) > rbox*EPSY - 1.0)) then
-        ijpcy = 1
-      end if
-
-      if ((px(3, i) < 1.0 .or. px(3, j) > rbox*EPSZ - 1.0) .or. &
-          (px(3, j) < 1.0 .or. px(3, i) > rbox*EPSZ - 1.0)) then
-        ijpcz = 1
-      end if
-
-    end do
-
-    if (ijpcx == 1 .or. ijpcy == 1 .or. ijpcz == 1) then
-
-      do K = 1, iticn
-        J = iiticn(K)
-        PTEMP(:, K) = PX(:, J)
-      end do
-
-      do K = 1, iticn
-
-        if (ijpcx == 1) then
-          if (PTEMP(1, K) < RBH1*EPSX) then
-            PTEMP(1, K) = PTEMP(1, K) + RBH1*EPSX
-          else
-            PTEMP(1, K) = PTEMP(1, K) - RBH1*EPSX
-          end if
-        end if
-
-        if (ijpcy == 1) then
-          if (PTEMP(2, K) < RBH1*EPSY) then
-            PTEMP(2, K) = PTEMP(2, K) + RBH1*EPSY
-          else
-            PTEMP(2, K) = PTEMP(2, K) - RBH1*EPSY
-          end if
-        end if
-
-        if (ijpcz == 1) then
-          if (PTEMP(3, K) < RBH1*EPSZ) then
-            PTEMP(3, K) = PTEMP(3, K) + RBH1*EPSZ
-          else
-            PTEMP(3, K) = PTEMP(3, K) - RBH1*EPSZ
-          end if
-        end if
-
-      end do
-
-      comdc = 1
-
-      do K = 2, iticn
-
-        I = 1
-        J = K
-
-        PTEMP(1, I) = PTEMP(1, I)*ABS(comdc) + &
-                      PTEMP(1, J)*ABS(PTEMP(6, J))
-        PTEMP(2, I) = PTEMP(2, I)*ABS(comdc) + &
-                      PTEMP(2, J)*ABS(PTEMP(6, J))
-        PTEMP(3, I) = PTEMP(3, I)*ABS(comdc) + &
-                      PTEMP(3, J)*ABS(PTEMP(6, J))
-
-        PTEMP(1, I) = PTEMP(1, I)/(ABS(comdc) + ABS(PTEMP(6, J)))
-        PTEMP(2, I) = PTEMP(2, I)/(ABS(comdc) + ABS(PTEMP(6, J)))
-        PTEMP(3, I) = PTEMP(3, I)/(ABS(comdc) + ABS(PTEMP(6, J)))
-
-        PTEMP(6, I) = PTEMP(6, I) + PTEMP(6, J)
-        PTEMP(5, J) = 0.0D0
-
-        comdc = comdc + 1
-      end do
-
-      do K = 1, iticn
-
-        if (ijpcx == 1) then
-          if (PTEMP(1, K) < RBH1*EPSX) then
-            PTEMP(1, K) = PTEMP(1, K) + RBH1*EPSX
-          else
-            PTEMP(1, K) = PTEMP(1, K) - RBH1*EPSX
-          end if
-        end if
-
-        if (ijpcy == 1) then
-          if (PTEMP(2, K) < RBH1*EPSY) then
-            PTEMP(2, K) = PTEMP(2, K) + RBH1*EPSY
-          else
-            PTEMP(2, K) = PTEMP(2, K) - RBH1*EPSY
-          end if
-        end if
-
-        if (ijpcz == 1) then
-          if (PTEMP(3, K) < RBH1*EPSZ) then
-            PTEMP(3, K) = PTEMP(3, K) + RBH1*EPSZ
-          else
-            PTEMP(3, K) = PTEMP(3, K) - RBH1*EPSZ
-          end if
-        end if
-
-      end do
-
-      do K = 1, iticn
-        J = iiticn(K)
-        PX(:, J) = PTEMP(:, K)
-      end do
-
-    else
-
-      comdc = 1
-
-      do K = 2, iticn
-
-        I = iiticn(1)
-        J = iiticn(K)
-
-        PX(1, I) = PX(1, I)*ABS(comdc) + PX(1, J)*ABS(PX(6, J))
-        PX(2, I) = PX(2, I)*ABS(comdc) + PX(2, J)*ABS(PX(6, J))
-        PX(3, I) = PX(3, I)*ABS(comdc) + PX(3, J)*ABS(PX(6, J))
-
-        PX(1, I) = PX(1, I)/(ABS(comdc) + ABS(PX(6, J)))
-        PX(2, I) = PX(2, I)/(ABS(comdc) + ABS(PX(6, J)))
-        PX(3, I) = PX(3, I)/(ABS(comdc) + ABS(PX(6, J)))
-
-        if (px(1, i) < 0.0) px(1, i) = 0.0
-        if (px(2, i) < 0.0) px(2, i) = 0.0
-        if (px(3, i) < 0.0) px(3, i) = 0.0
-
-        PX(6, I) = PX(6, I) + PX(6, J)
-        PX(5, J) = 0.0D0
-
-        comdc = comdc + 1
-      end do
-    end if
-
-    OPEN (13, file='defecttemp.dat', status='replace')
-
-    do i = 1, newdef
-      k = 0
-
-      do j = 1, iticn
-        if (idnewdef(i) == iiticn(j)) then
-          k = 1
-        end if
-      end do
-
-      if (k == 0) then
-        write (13, "(i8)") idnewdef(i)
-      end if
-
-    end do
-
-    newdef = newdef - iticn
-
-    deallocate (idnewdef)
-    deallocate (iicn)
-    deallocate (iiticn)
-
+    PX(1, NDTOT) = PI(1, i)
+    PX(2, NDTOT) = PI(2, i)
+    PX(3, NDTOT) = PI(3, i)
+    PX(6, NDTOT) = 1.0D0  !interstitial identifier
+    PX(7, NDTOT) = II(1, i)
   end do
 
-  close (13)
+  do j = 1, NDVAC
 
-  deallocate (Neighbor)
-  deallocate (NNeighbor)
+    NDTOT = NDTOT + 1
+    PX(1, NDTOT) = PV(1, j)
+    PX(2, NDTOT) = PV(2, j)
+    PX(3, NDTOT) = PV(3, j)
+    PX(6, NDTOT) = -1.0D0  !vacancy identifier
+    PX(7, NDTOT) = IV(1, j)
+  end do
+  
+  call features%defects%identifyClusters(PX, NDTOT, 1.0D0)
 
-  NTEMP = 0
-  PTEMP = 0.0D0
+  NDTOT = features%defects%numClusters
 
-  nvac1 = 0
-  nint1 = 0
+  !Put the clusters data in the PX array
+  !TODO remove dependancy of PX array
+  do i = 1, NDTOT
 
-  DO I = 1, NDTOT
-
-    IF ((PX(5, I) .NE. 0.0D0) .AND. (PX(6, I) .NE. 0.0D0)) THEN
-
-      NTEMP = NTEMP + 1
-
-      PX(4, I) = 3.334 + 0.866*abs(PX(6, I))**(1./3.)
-
-      PTEMP(:, NTEMP) = PX(:, I)
-
-      IF (PX(6, I) .EQ. -1) nvac1 = nvac1 + 1
-      IF (PX(6, I) .EQ. 1) nint1 = nint1 + 1
-    END IF
-
-  END DO
-
-  NDTOT = NTEMP
-
-  PX = 0.0D0
-
-!RESORTING,PX STORES THE POSITIONS OF THE ACTIVE VOLUMES
+    px(1,i) = features%defects%clusters(i)%comx
+    px(2,i) = features%defects%clusters(i)%comy
+    px(3,i) = features%defects%clusters(i)%comz
+    px(4,i) = features%defects%clusters(i)%radiusAV
+    px(5,i) = 1.0D0
+    px(6,i) = features%defects%clusters(i)%type
+    px(7,i) = 0
+  end do
 
   NDSTOT = 0
   sumInt = 0; sumVac = 0
 
-  DO I = 1, NDTOT
+  do i = 1, NDTOT
 
-    PX(:, I) = PTEMP(:, I)
+    if (PX(6, i) .GT. 0) sumInt = sumInt + int(abs(PX(6, i)))
+    if (PX(6, i) .LT. 0) sumVac = sumVac + int(abs(PX(6, i)))
+  end do
 
-    IF (PX(6, I) .GT. 0) sumInt = sumInt + int(abs(PX(6, I)))
-    IF (PX(6, I) .LT. 0) sumVac = sumVac + int(abs(PX(6, I)))
+  if (mod(ISTEP, NFREQ) .eq. 0) then
+    call DEFECT_PRINT(PX, NDTOT)
+    call features%defects%printBannedCount()
+  end if
 
-  END DO
+  call flush(6)
 
-  IF (MOD(ISTEP, NFREQ) .EQ. 0) then
-    CALL DEFECT_PRINT(PX, NDTOT)
-    CALL features%defects%printBanned()
-  END IF
+  NDSTOT = max(sumInt, sumVac)
 
-  CALL FLUSH (6)
-
-  NDSTOT = MAX(sumInt, sumVac)
-
-  IF (CALC) CALL MD_DPA
+  if (CALC) call MD_DPA
 
   ONDTOT = NDTOT
 
@@ -696,17 +315,13 @@ SUBROUTINE DCIDNT
 
 !IF NO DEFECT IS PRESENT, STOP THE PROGRM
 
-  IF (NDTOT .EQ. 0) THEN
+  if (NDTOT .EQ. 0) then
+    write (*, *) 'No defects in system. Stopping.'
+    stop
+  end if
 
-    WRITE (*, *) 'NO DEFECT IN SYSTEM,STOP'
-
-    STOP
-
-  END IF
-
-  RETURN
 END SUBROUTINE DCIDNT
-
+!***********************************************************************!
 !************************************************************
 ! Idea is to decrease dimer search for defects using KMC    *
 ! to select a defect for dimer search - migration energy    *
@@ -724,25 +339,30 @@ SUBROUTINE DFSEL
 
   REAL*8 PTEMP(7, 1)
   REAL*8 rnd, speed, dt, scalef, sump, prop
-  integer :: i, j, k, jmapsz, ijump
+  real*8 :: x,y,z,r
+  integer :: i, j, k, jmapsz, numClusters
+  integer :: clusterType
   REAL*8, allocatable, dimension(:, :) :: pj
 
   SKIP = .FALSE.
 
   speed = 0.0d0
   jmapsz = 1000
+  numClusters = features%defects%numClusters
 
   allocate (pj(1:2, 1:ndtot))
 
-  do i = 1, ndtot
+  do i = 1, numClusters
 
-    if (features%defects%isBanned(PX(1,i),PX(2,i),PX(3,i))) cycle
+    if (features%defects%clusters(i)%isBanned()) cycle
 
-    j = int(abs(px(6, i)))
-    if (px(6, i) .lt. 0) then
-      k = 1 !VACS
+    clusterType = features%defects%clusters(i)%type
+    j = abs(clusterType)
+
+    if (clusterType .lt. 0) then
+      k = 1 !vacancy type
     else
-      k = 2 !INTS
+      k = 2 !interstitial type
     end if
 
     if (j .lt. 50) then
@@ -765,46 +385,40 @@ SUBROUTINE DFSEL
 
   do i = 1, ndtot
 
-    if (features%defects%isBanned(PX(1,i),PX(2,i),PX(3,i))) cycle
+    if (features%defects%clusters(i)%isBanned()) cycle
 
-    j = int(abs(px(6, i)))
-    if (px(6, i) .lt. 0) then
-      k = 1
+    clusterType = features%defects%clusters(i)%type
+
+    if (clusterType .lt. 0) then
+      k = 1 !vacancy type
     else
-      k = 2
+      k = 2 !interstitial type
     end if
 
     sump = sump + pj(k, i)*scalef
     if (sump .ge. prop) exit
   end do
 
-  OBFQSUM = SPEED - pj(k, i)*scalef
+  call features%defects%saveClusterSelection(features%defects%clusters(i))
 
-  ijump = i
-  NDTOT = 1
-
-  PTEMP(1, 1) = px(1, ijump)
-  PTEMP(2, 1) = px(2, ijump)
-  PTEMP(3, 1) = px(3, ijump)
-  PTEMP(4, 1) = px(4, ijump)
-  PTEMP(5, 1) = px(5, ijump)
-  PTEMP(6, 1) = px(6, ijump)
-  PTEMP(7, 1) = px(7, ijump)
+  OBFQSUM = SPEED - pj(k, i)*scalef !rate sum of all other non chosen clusters
 
   PX = 0.0D0
 
 !PLACE SELECTED DEFECT IN THE FIRST POSITION
 
-  PX(:, 1) = PTEMP(:, 1)
+  if (mod(ISTEP, NFREQ) .eq. 0) then
+    x = features%defects%selectedCluster%comx
+    y = features%defects%selectedCluster%comy
+    z = features%defects%selectedCluster%comz
+    r = features%defects%selectedCluster%radiusAV
+    clusterType = features%defects%selectedCluster%type
 
-  IF (MOD(ISTEP, NFREQ) .EQ. 0) THEN
-    WRITE (*, '(15X,5(A10,X))') 'X', 'Y', 'Z', 'RADIUS', 'TYPE'
-    WRITE (*, '(A15,5(F10.3,X))') 'Selected Defect', PX(1:4, 1), PX(6, 1)
-  END IF
+    write (*, '(15X,5(A10,X))') 'X', 'Y', 'Z', 'RADIUS', 'TYPE'
+    write (*, '(A15,4(F10.3,X),I10)') 'Selected Defect', x, y, z, r, clusterType
+  end if
 
   deallocate (pj)
-
-  RETURN
 
 END SUBROUTINE DFSEL
 
@@ -927,7 +541,7 @@ SUBROUTINE KMC
   call MPI_BCAST(ban, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), ierr)
 
   if (ban) then
-    call features%defects%banDefect(PX(1,1),PX(2,1),PX(3,1))
+    call features%defects%banCluster(features%defects%selectedCluster)
     if (rank == 0) write(*,'(A,3F14.5)') 'Banned defect at: ', PX(1,1),PX(2,1),PX(3,1)
   end if
 
@@ -940,7 +554,7 @@ SUBROUTINE KMC
 
   RETURN
 
-END SUBROUTINE
+END SUBROUTINE KMC
 !***********************************************************************!
 !WILL INTRODUCE MORE DEFECTS AFTER A SPECIFIED AMOUNT OF TIME THAT MATCHES
 !EXPERIMENTAL DOSE RATE
@@ -984,7 +598,7 @@ SUBROUTINE DOSE
 
     IF (RANK == 0) CALC = .TRUE.
 
-    call features%defects%clearBanList()
+    call features%defects%clearBannedList()
 
   END IF
 

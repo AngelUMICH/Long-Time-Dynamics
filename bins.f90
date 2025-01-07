@@ -117,8 +117,6 @@ contains
 
     call this%resetGrid
 
-    if (nAtoms/this%nBins .lt. 1) write (*, *) "Warning: Too few atoms per bin"
-
     do atomID = 1, nAtoms
       xBinId = int(atoms(1, atomID)/this%xBinSize) + 1
       yBinId = int(atoms(2, atomID)/this%yBinSize) + 1

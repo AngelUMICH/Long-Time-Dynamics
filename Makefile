@@ -6,7 +6,7 @@ LMPFLIB = ./LAMMPS.o
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always --tags)
 
-OBJS = LAMMPS.o LAMMPS-wrapper.o version.o clusters.o bins.o define.o lmp.o queue.o helper.o ptm.o grain.o reflat.o feat.o init.o funct.o dimer.o main.o akmc.o
+OBJS = LAMMPS.o LAMMPS-wrapper.o version.o bins.o define.o lmp.o queue.o clusters.o helper.o ptm.o grain.o reflat.o feat.o init.o funct.o dimer.o main.o akmc.o
 FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form #-fcheck=all
 LIBS = -lgomp -lstdc++ -lm -ldl
 
