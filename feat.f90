@@ -10,7 +10,7 @@ module MicroStrucFeatures
   Type StructFeatures
 
     type(Grain) :: grains
-    type(RefLattice) :: reference
+    type(RefLattice) :: reflat
     type(DefectClusters) :: defects
 
   end type StructFeatures

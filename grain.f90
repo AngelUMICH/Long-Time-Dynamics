@@ -106,8 +106,6 @@ contains
   ! meet the minimum grain size requirement. Also, modify the grains ids
   ! to have ids start at 1.
 
-    use system, only: rank
-
     implicit none
 
     class(Grain), intent(inout) :: this

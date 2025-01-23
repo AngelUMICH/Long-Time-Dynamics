@@ -23,7 +23,10 @@ Module LMP_Driver
   contains
 
     procedure :: init => LAMMPS_Container_init
-    procedure :: setupSystem
+    procedure :: setup
+    procedure :: readSystem
+    procedure :: readForce
+    procedure :: readRestartSystem
     procedure :: getLammpsPtr
     procedure :: getCommunicator
     procedure :: getControlComm
@@ -32,7 +35,8 @@ Module LMP_Driver
     procedure :: assignPositions
     procedure :: relaxSystemEnergy
     procedure :: relaxSystemPressure
-    procedure :: updateRef
+    procedure :: writeData
+    procedure :: readData
 
     end type LAMMPS_Container
 
@@ -71,64 +75,148 @@ contains
       this%isDimer = .true.
     end if
 
-  end subroutine LAMMPS_Container_init
-!***********************************************************************!
-
-  subroutine setupSystem(this)
-
-    use SYSTEM
-
-    implicit none
-
-    class(LAMMPS_Container), intent(inout) :: this
-    character(len=200) :: str
-
-    !Setting up system in LAMMPS space
-
-    !Necessary commands for OPLD to work
+    !Necessary commands for DRLD to work
     call lammps_command(this%lammpsInstance, 'units metal')
     call lammps_command(this%lammpsInstance, 'boundary p p p')
     call lammps_command(this%lammpsInstance, 'atom_style atomic')
     call lammps_command(this%lammpsInstance, 'atom_modify map array')
 
-    if (TLAT .eq. 1) then
-      write (str, '(a,x,f7.5)') 'bcc', rlat
-    else if (TLAT .eq. 2) then
-      write (str, '(a,x,f7.5)') 'fcc', rlat
+  end subroutine LAMMPS_Container_init
+!***********************************************************************!
+
+  subroutine setup(this, normalFile, restartFile, mode)
+    !Setup the initial system (i.e atoms pos and box size) from a LAMMPS
+    !data file. In both modes, normal or restart, the atoms and box size
+    !are read from a data file either from the 'in.lammps' or restart file.
+
+    implicit none
+
+    class(LAMMPS_Container), intent(inout) :: this
+    integer, intent(in) :: mode
+    character(len=*), intent(in) :: normalFile, restartFile
+
+    !If mode == 1 use normal file, otherwise, mode == 1 use restart file.
+    !Same forces must be used. The force is described in the normal file.
+    if (mode == 1) then
+      call this%readSystem(normalFile)
+      call this%readForce(normalFile)
+    else if (mode == 2) then
+      call this%readRestartSystem(restartFile)
+      call this%readForce(normalFile)
     end if
-
-    if (RANK .eq. 0 .and. this%isSystem) print *, 'lattice '//trim(str)
-    call lammps_command(this%lammpsInstance, 'lattice '//trim(str))
-
-    write (str, '(f3.1,x,f8.5,x,f3.1,x,f8.5,x,f3.1,x,f8.5)') 0.0, rbox, 0.0, rbox, 0.0, rbox
-    if (RANK .eq. 0 .and. this%isSystem) print *, 'region box block '//trim(str)//' units lattice'
-    call lammps_command(this%lammpsInstance, 'region box block '//trim(str)//' units lattice')
-    call lammps_command(this%lammpsInstance, 'create_box 1 box')
-
-    !Read from input file using LAMMPS
-    if (RANK .eq. 0 .and. this%isSystem) print *, "Reading in initial positions"
-    call lammps_file(this%lammpsInstance, 'in.lammps')
-    ! call lammps_command(this%lammpsInstance, 'thermo_style custom step pe lx ly lz pxx pyy pzz')
-
-    !Including necessary computes for OPLD
-    call lammps_command(this%lammpsInstance, 'compute TotEn all pe')
-    call lammps_command(this%lammpsInstance, 'compute TotPress all pressure NULL virial')
 
     !Initiating system values
     call lammps_command(this%lammpsInstance, 'run 0')
 
-    !Extracting MD values for cascade
-    call lammps_extract_compute(this%energy, this%lammpsInstance, 'thermo_pe', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
-    call lammps_extract_compute(this%pressure, this%lammpsInstance, 'thermo_press', LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR)
+    !Setting up energy and pressure measurements
+    call lammps_extract_compute(this%energy, this%lammpsInstance, &
+                              'thermo_pe', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
+    call lammps_extract_compute(this%pressure, this%lammpsInstance, &
+                              'thermo_press', LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR)
 
-    CALL LAMMPS_COMMAND(this%lammpsInstance, 'fix storePotVector all property/atom d_pot')
-
+    !Dimer LAMMPS instace should be empty because it will be filled with 
+    !atoms during saddle point searches.
     if (this%isDimer) call lammps_command(this%lammpsInstance, 'delete_atoms group all')
 
-  end subroutine setupSystem
-
+  end subroutine setup
 !***********************************************************************!
+  subroutine readSystem(this, inputFile)
+    !Read the system (atoms and box) from the input file.
+    !The inputFile obtains information of the system in the first block.
+    !A block a collection of LAMMPS commands that are preceeded by the
+    !size of the block.
 
+    use mpi
+
+    class(LAMMPS_Container), intent(inout) :: this
+    character(len=*), intent(in) :: inputFile
+
+    integer :: blockSize, i, ierr
+    logical :: exists
+    character(len=200) command
+
+    inquire(file=inputFile, exist=exists)
+    if (.not. exists) then
+      write(*,'(A)') 'File '//trim(inputFile)//' cannot be found.'
+      call MPI_FINALIZE(ierr)
+      stop
+    end if
+
+    open(unit=21, file=inputFile)
+
+    read(21, *)blockSize
+    do i = 1, blockSize
+      read(21, '(A)') command
+      call lammps_command(this%lammpsInstance, trim(command))
+    end do
+
+    close(21)
+
+  end subroutine readSystem
+!***********************************************************************!
+  subroutine readForce(this, inputFile)
+    !Initiate the force from the input file. The second block in the file
+    !contains the necessary information to setup the force.
+
+    use mpi
+
+    class(LAMMPS_Container), intent(inout) :: this
+    character(len=*), intent(in) :: inputFile
+
+    integer :: blockSize, i, ierr
+    logical :: exists
+    character(len=200) command
+
+    inquire(file=inputFile, exist=exists)
+    if (.not. exists) then
+      write(*,'(A)') 'File '//trim(inputFile)//' cannot be found.'
+      call MPI_FINALIZE(ierr)
+      stop
+    end if
+
+    open(unit=21, file=inputFile)
+
+    !Skip over the first block
+    read(21, *) blockSize
+    do i = 1, blockSize
+      read(21, '(A)') command
+    end do
+    read(21, *) !skip spacer line
+
+    !Read the force block
+    read(21, *) blockSize
+    do i = 1, blockSize
+      read(21, '(A)') command
+      call lammps_command(this%lammpsInstance, trim(command))
+    end do
+
+    close(21)
+
+  end subroutine readForce
+!***********************************************************************!
+  subroutine readRestartSystem(this, file)
+    !Setup the system from a restart file. The path of the data file
+    !can be found in the first line of the provided restart file.
+
+    class(LAMMPS_Container), intent(inout) :: this
+    character(len=*), intent(in) :: file
+
+    logical :: exists
+    character(len=200) path
+
+    inquire(file=file, exist=exists)
+    if (.not. exists) then
+      write(*,'(A)') 'File '//trim(file)//' cannot be found.'
+      stop
+    end if
+
+    open(unit=22, file=file)
+    read(22, '(A)') path
+    call this%readData(path)
+    close(22)
+
+  end subroutine readRestartSystem
+!***********************************************************************!
   function getLammpsPtr(this) result(lammpsPtr)
 
     use, intrinsic :: iso_c_binding, only: C_NULL_PTR
@@ -246,8 +334,7 @@ contains
 !***********************************************************************!
 
   subroutine relaxSystemPressure(this)
-
-    ! This subroutine is valid for non-dimer lammps containers
+    !Pressure relax the initial system by changing box size.
 
     use SYSTEM
     use MPI
@@ -255,63 +342,81 @@ contains
     implicit none
 
     class(LAMMPS_Container), intent(inout) :: this
-    character(len=200) :: str
 
-    if (ISTEP .eq. 1) then
-
-      write (str, '(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
-      if (RANK .eq. 0 .and. SigRelOn) write (*, '(A)') 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
-
-      if (SigRelOn) call lammps_command(this%lammpsInstance, 'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
-      call this%relaxSystemEnergy
-      if (SigRelOn) call lammps_command(this%lammpsInstance, 'unfix f_boxrelax')
-
-      if (rank .eq. 0 .and. SigRelOn) then
-        write(*,'(6A14)') 'pxx','pyy','pzz','pxy','pyz','pxz'
-        write(*,'(6E14.5)') PRESS(1), PRESS(2), PRESS(3), PRESS(4), PRESS(5), PRESS(6)
-      end if
-
-    end if
-
-  end subroutine relaxSystemPressure
-
-!***********************************************************************!
-  subroutine updateRef(this)
-
-    use system
-    use MPI
-
-    implicit none
-
-    class(LAMMPS_Container), intent(inout) :: this
-
-    integer :: i
-    real*8, dimension(3) :: lmpBoxLo = 0, lmpBoxHi = 0
     real*8 :: xy = 0, yz = 0, xz = 0
+    real*8, dimension(3) :: lmpBoxHi = 0, lmpBoxLo = 0
     logical, dimension(3) :: periodicity = 0
     logical :: box_change = 0
     character(len=200) :: str
 
-    if (ISTEP .eq. 1) then
+    !Pressure relax if enabled. Otherwise energy relax.
+    write (str, '(A,F10.3,A,F10.3,A,F10.3)') 'x ', SIGX, ' y ', SIGY, ' z ', SIGZ
+    if (RANK .eq. 0 .and. SigRelOn) write (*, '(A)') &
+    'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0'
 
-      call lammps_extract_box(this%lammpsInstance, lmpBoxLo, lmpBoxHi, xy, yz, xz, periodicity, box_change)
+    if (SigRelOn) call lammps_command(this%lammpsInstance, &
+    'fix f_boxrelax all box/relax '//trim(str)//' fixedpoint 0 0 0')
+    call this%relaxSystemEnergy
+    if (SigRelOn) call lammps_command(this%lammpsInstance, 'unfix f_boxrelax')
 
-      EPSX = (lmpBoxHi(1) - lmpBoxLo(1))/(rbox*rlat)
-      EPSY = (lmpBoxHi(2) - lmpBoxLo(2))/(rbox*rlat)
-      EPSZ = (lmpBoxHi(3) - lmpBoxLo(3))/(rbox*rlat)
-
-      if (rank == 0) write(*,'(A,3F8.3,A)') 'New system box size (', RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ, ' )'
-
-      call create_ref_lattice
-
-      ! Center box corner at origin
-      write (str, '(A,F10.6,A,F10.6,A,F10.6)') 'x final 0 ', RBOX*EPSX, ' y final 0 ', RBOX*EPSY, ' z final 0 ', RBOX*EPSZ
-      call mpi_bcast(str, len(str), MPI_CHARACTER, 0, this%communicator, ierr)
-      call lammps_command(this%lammpsInstance, 'change_box all '//trim(str)//' units lattice')
-
+    if (rank .eq. 0 .and. SigRelOn) then
+      write(*,'(6A14)') 'pxx','pyy','pzz','pxy','pyz','pxz'
+      write(*,'(6E14.5)') PRESS(1), PRESS(2), PRESS(3), PRESS(4), PRESS(5), PRESS(6)
     end if
 
-  end subroutine updateRef
+    !Update strain parameters
+    call lammps_extract_box(this%lammpsInstance, lmpBoxLo, lmpBoxHi, &
+                            xy, yz, xz, periodicity, box_change)
 
+    EPSX = (lmpBoxHi(1) - lmpBoxLo(1))/(rbox*rlat)
+    EPSY = (lmpBoxHi(2) - lmpBoxLo(2))/(rbox*rlat)
+    EPSZ = (lmpBoxHi(3) - lmpBoxLo(3))/(rbox*rlat)
+
+    if (rank .eq. 0 .and. SigRelOn) write(*,'(A,3F15.8,A)') &
+    'New system box size (', RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ, ' )'
+
+
+  end subroutine relaxSystemPressure
+
+!***********************************************************************!
+  subroutine writeData(this, filepath)
+    !Create the data restart files needed to continue a simulation on
+    !another run. See https://docs.lammps.org/write_data.html for more
+    !information is written.
+
+    use system, only: istep
+
+    class(LAMMPS_Container), intent(inout) :: this
+    character(len=*), intent(out) :: filepath
+
+    character(len=200) :: writeCommand
+
+    write(filepath, '(A,I0)') './RESTART/data.', istep
+    write(writeCommand, '(A)') 'write_data '//trim(filepath)
+
+    call lammps_command(this%lammpsInstance, writeCommand)
+
+  end subroutine writeData
+!***********************************************************************!
+  subroutine readData(this, filepath)
+    !Read a data file to continue a previous simulation. This preserves
+    !box size and atom positions more consistently. See the following
+    !https://docs.lammps.org/read_data.html for what data is read.
+
+    use system, only: rank
+
+    class(LAMMPS_Container), intent(inout) :: this
+    character(len=*), intent(out) :: filepath
+
+    character(len=200) :: readCommand
+
+    if (rank == 0 .and. this%isSystem) then
+      write(*,'(A)') 'Reading data file '//trim(filepath)
+    end if
+    write(readCommand, '(A)') 'read_data '//trim(filepath)
+
+    call lammps_command(this%lammpsInstance, readCommand)
+
+  end subroutine readData
 !***********************************************************************!
 end module LMP_Driver

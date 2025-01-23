@@ -3,39 +3,37 @@ REAL*8 FUNCTION PBC(X, DIM)
 
   USE SYSTEM, ONLY: RBOX, RBH1, RBH2, EPSX, EPSY, EPSZ
 
-  IMPLICIT NONE
+  implicit none
 
   INTEGER DIM
   REAL*8 X, EPS
 
-  IF (DIM .EQ. 1) THEN
+  if (DIM .EQ. 1) then
     EPS = EPSX
-  ELSEIF (DIM .EQ. 2) THEN
+  ELSEif (DIM .EQ. 2) then
     EPS = EPSY
-  ELSEIF (DIM .EQ. 3) THEN
+  ELSEif (DIM .EQ. 3) then
     EPS = EPSZ
-  END IF
+  end if
 
-  IF ((X .LE. RBH1*EPS) .AND. (X .GE. RBH2*EPS)) THEN
+  if ((X .LE. RBH1*EPS) .AND. (X .GE. RBH2*EPS)) then
     PBC = X
-  ELSEIF (X .LT. RBH2*EPS) THEN
+  ELSEif (X .LT. RBH2*EPS) then
     PBC = X + RBOX*EPS
   ELSE
     PBC = X - RBOX*EPS
-  END IF
+  end if
 
   RETURN
 
-END FUNCTION PBC
+end FUNCTION PBC
 !***********************************************************************!
-SUBROUTINE FIND_DEFECT
+subroutine FIND_DEFECT
 
-  USE SYSTEM
-  USE DEFECT
-  use MicroStrucFeatures, only: features
-  use LMP_DRIVER, only: lmpSystem
+  use system
+  use defect
 
-  IMPLICIT NONE
+  implicit none
 
   INTEGER I
 
@@ -48,18 +46,18 @@ SUBROUTINE FIND_DEFECT
 
   !!TALLY NUMBER OF VACANCIES AND INTERSTITIALS
 
-  DO I = 1, NATOMC
-    IF (TI(I) .NE. 1) NDINT = NDINT + 1
-  END DO
+  do I = 1, NATOMC
+    if (TI(I) .NE. 1) NDINT = NDINT + 1
+  end do
 
-  DO I = 1, NATOMR
-    IF (TV(I) .NE. 1) NDVAC = NDVAC + 1
-  END DO
+  do I = 1, NATOMR
+    if (TV(I) .NE. 1) NDVAC = NDVAC + 1
+  end do
 
   RETURN
-END SUBROUTINE FIND_DEFECT
+end subroutine FIND_DEFECT
 !***********************************************************************!
-SUBROUTINE WignerSeitzAnalysis
+subroutine WignerSeitzAnalysis
 
   USE OMP_LIB
   USE SYSTEM
@@ -68,7 +66,7 @@ SUBROUTINE WignerSeitzAnalysis
   USE LMP_DRIVER
   use MicroStrucFeatures
 
-  IMPLICIT NONE
+  implicit none
 
   REAL*8 RX, RY, RZ, RS, RMIN, FACTOR, PBC
   INTEGER I, J, MIN, N, ATOM
@@ -79,7 +77,7 @@ SUBROUTINE WignerSeitzAnalysis
 
   IDLO = NATOMC/NPROCS*(RANK) + 1
   IDHI = NATOMC/NPROCS*(RANK + 1)
-  IF (RANK .eq. NPROCS - 1) IDHI = IDHI + MOD(NATOMC, NPROCS)
+  if (RANK .eq. NPROCS - 1) IDHI = IDHI + MOD(NATOMC, NPROCS)
 
   CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
 
@@ -97,52 +95,52 @@ SUBROUTINE WignerSeitzAnalysis
 !!DETERMINE THE OCCUPANCY OF EACH SITE
 
 !$OMP PARALLEL PRIVATE(RS,RX,RY,RZ,RMIN,RID,MIN,J,N,ATOM) SHARED(OC,OCC)
-!$OMP DO
-  DO I = IDLO, IDHI
+!$OMP do
+  do I = IDLO, IDHI
     if (features%grains%grainOccupy(I) == 0) cycle
     RS = 0; RMIN = HUGE(RMIN); MIN = 0
     call RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I), 2.0D0*FACTOR)
     if (RFGRID%singleListCount == 0) print *, RA(1, I), RA(2, I), RA(3, I)
-    DO J = 1, RFGRID%singleListCount
+    do J = 1, RFGRID%singleListCount
       RID = RFGRID%singleNeighList(j)
       RX = PBC(RA(1, I) - RR(1, RID), 1)
       RY = PBC(RA(2, I) - RR(2, RID), 2)
       RZ = PBC(RA(3, I) - RR(3, RID), 3)
       RS = RX*RX + RY*RY + RZ*RZ
-      IF (RS .LT. RMIN) THEN
+      if (RS .LT. RMIN) then
         MIN = RID
         RMIN = RS
-      END IF
-    END DO
+      end if
+    end do
 
 !$OMP CRITICAL
     OCC(MIN) = OCC(MIN) + 1
     OC(OCC(MIN), MIN) = I
-!$OMP END CRITICAL
+!$OMP end CRITICAL
 
-  END DO
-!$OMP END DO
+  end do
+!$OMP end do
 
 !$OMP SINGLE
   CALL MPI_ALLREDUCE(OCC, OCCBUFF, SIZE(OCC), MPI_INT, MPI_SUM, lmpSystem%getCommunicator(), IERR)
-!$OMP END SINGLE
+!$OMP end SINGLE
 
 !!USING OCCUPANCY TO DETERMINE DEFECTS
-!$OMP DO
-  DO I = 1, NATOMR
+!$OMP do
+  do I = 1, NATOMR
 
     N = OCC(I)
-    IF (N .GT. 0) THEN
+    if (N .GT. 0) then
       TV(I) = N
-      DO J = 1, N
+      do J = 1, N
         ATOM = OC(J, I)
         TI(ATOM) = OCCBUFF(I)
-      END DO
-    END IF
+      end do
+    end if
 
-  END DO
-!$OMP END DO
-!$OMP END PARALLEL
+  end do
+!$OMP end do
+!$OMP end PARALLEL
 
   ! Remove the grain boundary ints from defect list
   do i = IDLO, IDHI
@@ -160,7 +158,7 @@ SUBROUTINE WignerSeitzAnalysis
   CALL MPI_BCAST(TV, SIZE(TV), MPI_INT, 0, lmpSystem%getCommunicator(), ierr)
   CALL MPI_BCAST(TI, SIZE(TI), MPI_INT, 0, lmpSystem%getCommunicator(), ierr)
 
-END SUBROUTINE WignerSeitzAnalysis
+end subroutine WignerSeitzAnalysis
 !***********************************************************************!
 recursive subroutine quicksort_int(array1, array2, lo, hi)
     implicit none
@@ -201,7 +199,7 @@ end subroutine quicksort_int
 !***********************************************************************!
 !!OUTPUT DEFECTS FOR OVITO
 
-SUBROUTINE OVITO
+subroutine OVITO
 
   USE SYSTEM
 
@@ -209,7 +207,7 @@ SUBROUTINE OVITO
 
   USE MicroStrucFeatures, only: features
 
-  IMPLICIT NONE
+  implicit none
 
   INTEGER I
 
@@ -217,72 +215,72 @@ SUBROUTINE OVITO
 
 !!CREATING THE CURRENT DEFECT POSITION FILE
 
-  WRITE (FILENAME, '(A8, I0, A4)') './DUMP/D', ISTEP, '.OUT'
+  write (FILENAME, '(A8, I0, A4)') './DUMP/D', ISTEP, '.OUT'
 
-  OPEN (UNIT=29, FILE=TRIM(FILENAME))
+  open (UNIT=29, FILE=TRIM(FILENAME))
 
-  WRITE (29, '(A)') 'ITEM: TIMESTEP'
-  WRITE (29, *) ISTEP
-  WRITE (29, '(A)') 'ITEM: NUMBER OF ATOMS'
-  WRITE (29, *) NDVAC + NDINT
-  WRITE (29, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
-  WRITE (29, '(2F10.4,I5)') 0.00, RBOX*EPSX, 3
-  WRITE (29, '(2F10.4,I5)') 0.00, RBOX*EPSY, 3
-  WRITE (29, '(2F10.4,I5)') 0.00, RBOX*EPSZ, 3
-  WRITE (29, '(A)') 'ITEM: ATOMS x y z type'
+  write (29, '(A)') 'ITEM: TIMESTEP'
+  write (29, *) ISTEP
+  write (29, '(A)') 'ITEM: NUMBER OF ATOMS'
+  write (29, *) NDVAC + NDINT
+  write (29, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
+  write (29, '(2F10.4,I5)') 0.00, RBOX*EPSX, 3
+  write (29, '(2F10.4,I5)') 0.00, RBOX*EPSY, 3
+  write (29, '(2F10.4,I5)') 0.00, RBOX*EPSZ, 3
+  write (29, '(A)') 'ITEM: ATOMS x y z type'
 
-  DO I = 1, NATOMC
+  do I = 1, NATOMC
 
-    IF (TI(I) .NE. 1) THEN
+    if (TI(I) .NE. 1) then
 
-      WRITE (29, '(3F12.5,I5)') RA(:, I), 2
+      write (29, '(3F12.5,I5)') RA(:, I), 2
 
-    END IF
+    end if
 
-  END DO
+  end do
 
-  DO I = 1, NATOMR
+  do I = 1, NATOMR
 
-    IF (TV(I) .NE. 1) THEN
+    if (TV(I) .NE. 1) then
 
-      WRITE (29, '(3F12.5,I5)') RR(:, I), 1
+      write (29, '(3F12.5,I5)') RR(:, I), 1
 
-    END IF
+    end if
 
-  END DO
+  end do
 
-  CLOSE (29)
+  close (29)
 
 !!CREATING DISLOCATION ANALYSIS FILE
 
-  WRITE (FILENAME, '(A12, I0, A4)') './DUMP/DXA/A', ISTEP, '.OUT'
+  write (FILENAME, '(A12, I0, A4)') './DUMP/DXA/A', ISTEP, '.OUT'
 
-  OPEN (UNIT=30, FILE=TRIM(FILENAME))
+  open (UNIT=30, FILE=TRIM(FILENAME))
 
-  WRITE (30, '(A)') 'ITEM: TIMESTEP'
-  WRITE (30, *) ISTEP
-  WRITE (30, '(A)') 'ITEM: NUMBER OF ATOMS'
-  WRITE (30, *) NATOMC
-  WRITE (30, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
-  WRITE (30, '(2F10.4,I5)') 0.00, RBOX*EPSX, 3
-  WRITE (30, '(2F10.4,I5)') 0.00, RBOX*EPSY, 3
-  WRITE (30, '(2F10.4,I5)') 0.00, RBOX*EPSZ, 3
-  WRITE (30, '(A)') 'ITEM: ATOMS x y z grain'
+  write (30, '(A)') 'ITEM: TIMESTEP'
+  write (30, *) ISTEP
+  write (30, '(A)') 'ITEM: NUMBER OF ATOMS'
+  write (30, *) NATOMC
+  write (30, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
+  write (30, '(2F15.8,I1)') 0.00, RBOX*EPSX, 3
+  write (30, '(2F15.8,I1)') 0.00, RBOX*EPSY, 3
+  write (30, '(2F15.8,I1)') 0.00, RBOX*EPSZ, 3
+  write (30, '(A)') 'ITEM: ATOMS x y z grain'
 
-  DO I = 1, NATOMC
-    WRITE (30, '(3F14.5,1I14)') RA(1, I),RA(2, I),RA(3, I),features%grains%grainOccupy(i)
-  END DO
+  do I = 1, NATOMC
+    write (30, '(3F14.5,1I14)') RA(1, I),RA(2, I),RA(3, I),features%grains%grainOccupy(i)
+  end do
 
-  CLOSE (30)
+  close (30)
 
-END SUBROUTINE OVITO
+end subroutine OVITO
 !***********************************************************************!
-SUBROUTINE BASIC_DAMAGE(NFRKL)
+subroutine BASIC_DAMAGE(NFRKL)
 
   USE SYSTEM, ONLY: RA, NATOMC, RANK, DECUT, TDAM
   USE MicroStrucFeatures
 
-  IMPLICIT NONE
+  implicit none
 
   INTEGER :: I, J, ID, NFRKL, N
   INTEGER :: MOVEID(NFRKL)
@@ -296,72 +294,72 @@ SUBROUTINE BASIC_DAMAGE(NFRKL)
 
   MOVEID = 0
 
-  IF (NFRKL .LE. 0) RETURN
+  if (NFRKL .LE. 0) RETURN
 
-  CALL RANDOM_SEED()
+  CALL RANdoM_SEED()
 
       !!PICK NFRKL ATOMS TO MOVE (SHOULD CREATE NFKRL # OF FRENKEL PAIRS)
 
-  IF (RANK .EQ. 0) THEN
+  if (RANK .EQ. 0) then
 
     N = 1
 
-    DO WHILE (N .LE. NFRKL)
+    do WHILE (N .LE. NFRKL)
 
-      CALL RANDOM_NUMBER(RND)
+      CALL RANdoM_NUMBER(RND)
       ID = CEILING(RND*NATOMC)
-      IF (ID .EQ. 0) ID = 1
+      if (ID .EQ. 0) ID = 1
 
       ! Do not insert chosen atom if it already is in the list
       ! or if it grain boundary atom
       INSERT = .TRUE.
-      DO J = 1, N - 1
-        IF (ID .EQ. MOVEID(J) .or. features%grains%grainOccupy(ID) == 0) INSERT = .FALSE.
-      END DO
-      IF (INSERT) THEN
+      do J = 1, N - 1
+        if (ID .EQ. MOVEID(J) .or. features%grains%grainOccupy(ID) == 0) INSERT = .FALSE.
+      end do
+      if (INSERT) then
         MOVEID(N) = ID
         N = N + 1
-      END IF
+      end if
 
-    END DO
+    end do
 
-  END IF
+  end if
 
-      !!MOVE CHOSEN ATOMS TO RANDOM LOCATIONS
+      !!MOVE CHOSEN ATOMS TO RANdoM LOCATIONS
 
-  IF (TDAM .EQ. 2) THEN
+  if (TDAM .EQ. 2) then
 
-    IF (RANK .EQ. 0) THEN
+    if (RANK .EQ. 0) then
 
-      WRITE (*, '(A,I0,A)') 'Generating ', NFRKL, ' Frenkel pairs'
+      write (*, '(A,I0,A)') 'Generating ', NFRKL, ' Frenkel pairs'
 
-      DO I = 1, NFRKL
+      do I = 1, NFRKL
 
         CALL FRENKEL_POS_UPDATE(NEWPOS, DLIM)
         RA(:, MOVEID(I)) = NEWPOS
 
-      END DO
+      end do
 
-    END IF
+    end if
 
-  ELSE IF (TDAM .EQ. 3) THEN
+  ELSE if (TDAM .EQ. 3) then
 
-    IF (RANK .EQ. 0) WRITE (*, '(A,I0,A)') 'Generating ', NFRKL, ' single vacancies'
+    if (RANK .EQ. 0) write (*, '(A,I0,A)') 'Generating ', NFRKL, ' single vacancies'
 
     CALL CREATE_VACANCIES(NFRKL, MOVEID)
 
-  END IF
+  end if
 
-END SUBROUTINE BASIC_DAMAGE
+end subroutine BASIC_DAMAGE
 !***********************************************************************!
-SUBROUTINE CREATE_VACANCIES(NFRKL, IDS)
+subroutine CREATE_VACANCIES(NFRKL, IDS)
 
   USE SYSTEM
   USE LMP_DRIVER
   USE MPI
   use MicroStrucFeatures
 
-  IMPLICIT NONE
+  implicit none
 
   INTEGER :: I, NFRKL
   INTEGER :: IDS(NFRKL)
@@ -373,10 +371,10 @@ SUBROUTINE CREATE_VACANCIES(NFRKL, IDS)
   CALL MPI_BCAST(IDS, NFRKL, MPI_INT, 0, lmpSystem%getCommunicator(), IERR)
 
   !Update lammps on what atoms were deleted
-  DO I = 1, NFRKL
-    WRITE (IDSTR, '(I0)') IDS(I)
+  do I = 1, NFRKL
+    write (IDSTR, '(I0)') IDS(I)
     CALL lammps_command(lmpSystem%getLammpsPtr(), 'group deleteList id '//TRIM(IDSTR))
-  END DO
+  end do
   CALL lammps_command(lmpSystem%getLammpsPtr(), 'delete_atoms group deleteList')
 
   ONATOMC = NATOMC
@@ -389,15 +387,15 @@ SUBROUTINE CREATE_VACANCIES(NFRKL, IDS)
   !Fix grain assignment since ordering got messed up
   call grainAssignmentFix(ORA,ONATOMC)
 
-END SUBROUTINE CREATE_VACANCIES
+end subroutine CREATE_VACANCIES
 !***********************************************************************!
-SUBROUTINE grainAssignmentFix(OLDPOS, OLDC)
+subroutine grainAssignmentFix(OLDPOS, OLDC)
 
   USE SYSTEM
   USE MicroStrucFeatures
   USE BINS
 
-  IMPLICIT NONE
+  implicit none
 
   INTEGER, INTENT(IN) :: OLDC
   REAL*8, DIMENSION(3,OLDC), INTENT(IN) :: OLDPOS
@@ -411,27 +409,27 @@ SUBROUTINE grainAssignmentFix(OLDPOS, OLDC)
   CALL BG%initBinGrid(30, 30, 30, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
   CALL BG%assignAtomsToBins(OLDPOS, OLDC)
 
-  DO I=1,NATOMC
+  do I=1,NATOMC
 
     CALL BG%getNearestNeighbors(RA(1,I),RA(2,I),RA(3,I),1.0D0)
-    DO J = 1, BG%singleListCount
+    do J = 1, BG%singleListCount
       K = BG%singleNeighList(J)
-      IF (norm2(RA(:,I)-OLDPOS(:,K)) < 0.01) THEN
+      if (norm2(RA(:,I)-OLDPOS(:,K)) < 0.01) then
         features%grains%grainOccupy(i) = OGA(k)
         if (OGA(k) > 3 .and. rank == 0) print *, OGA(k), k
         exit
-      END IF
-    END DO
+      end if
+    end do
 
-  END DO
+  end do
 
-END SUBROUTINE grainAssignmentFix
+end subroutine grainAssignmentFix
 !***********************************************************************!
-SUBROUTINE FRENKEL_POS_UPDATE(POS, THRESH)
+subroutine FRENKEL_POS_UPDATE(POS, THRESH)
 
   USE SYSTEM, ONLY: RA, NATOMC, RBOX, EPSX, EPSY, EPSZ
 
-  IMPLICIT NONE
+  implicit none
 
   INTEGER :: I, ID_NEAR
   REAL*8, INTENT(INOUT) :: POS(3)
@@ -442,15 +440,15 @@ SUBROUTINE FRENKEL_POS_UPDATE(POS, THRESH)
 
   ID_NEAR = 0; RS_NEAR = HUGE(RS_NEAR); FLAG = .TRUE.
 
-  CALL RANDOM_NUMBER(POS)
+  CALL RANdoM_NUMBER(POS)
 
   POS(1) = POS(1)*RBOX*EPSX
   POS(2) = POS(2)*RBOX*EPSY
   POS(3) = POS(3)*RBOX*EPSZ
 
-      !!FIND CLOSEST ATOM TO (X,Y,Z)
+      !!FIND closeST ATOM TO (X,Y,Z)
 
-  DO I = 1, NATOMC
+  do I = 1, NATOMC
 
     RX = RA(1, I) - POS(1)
 
@@ -460,19 +458,19 @@ SUBROUTINE FRENKEL_POS_UPDATE(POS, THRESH)
 
     RS = RX*RX + RY*RY + RZ*RZ
 
-    IF (RS .LT. RS_NEAR) THEN
+    if (RS .LT. RS_NEAR) then
 
       RS_NEAR = RS
 
       ID_NEAR = I
 
-    END IF
+    end if
 
-  END DO
+  end do
 
       !!! UPDATE THE POSITION UNTIL IT IS SUITABLE FOR RELAXATION
 
-  DO WHILE (FLAG)
+  do WHILE (FLAG)
 
     FLAG = .FALSE.
 
@@ -494,18 +492,18 @@ SUBROUTINE FRENKEL_POS_UPDATE(POS, THRESH)
 
     RS = RX*RX + RY*RY + RZ*RZ
 
-    IF (RS .LT. THRESH) FLAG = .TRUE.
+    if (RS .LT. THRESH) FLAG = .TRUE.
 
-  END DO
+  end do
 
-END SUBROUTINE FRENKEL_POS_UPDATE
+end subroutine FRENKEL_POS_UPDATE
 !***********************************************************************!
-SUBROUTINE MD_DPA
+subroutine MD_DPA
 
   USE SYSTEM, ONLY: NATOMC, DPA, AVDPA, DPAC, DTIME, DRATE, TDAM, CALC, NFREKL
   USE DEFECT, ONLY: ONDSTOT, NDSTOT
 
-  IMPLICIT NONE
+  implicit none
 
   REAL*8 :: NEWDSP
 
@@ -519,99 +517,100 @@ SUBROUTINE MD_DPA
 
   !UPDATE TIME BETWEEN CASCADES
 
-  IF (TDAM .EQ. 1) THEN
+  if (TDAM .EQ. 1) then
     DTIME = AVDPA/DRATE
     DPA = DPA + NEWDSP/NATOMC
-  ELSE IF (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
+  ELSE if (TDAM .EQ. 2 .OR. TDAM .EQ. 3) then
     DTIME = (FLOAT(NFREKL)/FLOAT(NATOMC))/DRATE
     DPA = DPA + (FLOAT(NFREKL)/FLOAT(NATOMC))
-  END IF
+  end if
 
   !ADD AVERAGE DPA PER CASCADE TO CURRENT DPA VALUE
 
   CALC = .FALSE.
 
-END SUBROUTINE MD_DPA
+end subroutine MD_DPA
 !***********************************************************************!
-      !!CREATES RESTART FILES AT FIXED INTERVALS. THESE RESTART FILES
-      !!INCLUDE THE SYSTEM CONFIGURATION INCASE ONE WANT TO RESTART THE
-      !!SIMULATION AT A CERTAIN POINT FOR ANY REASON.
-SUBROUTINE RESTART
+subroutine RESTART
+  !Create all the necessary restart files at a frequency matching
+  !'writeFreq'. A LAMMPS data restart file is created first. Then
+  !internal DRLD paramters and variables are writen.
 
-  USE SYSTEM
-  USE DEFECT
+  use system
+  use defect
+  use lmp_driver
   use MicroStrucFeatures
 
-  IMPLICIT NONE
 
-  INTEGER I, J
+  implicit none
 
-  CHARACTER(len=200) FILENAME
+  integer :: i, writeFreq
 
-  IF (RANK .EQ. 0) THEN
+  character(len=200) filename, datapath
 
-    IF (MOD(ISTEP, 1000) .EQ. 0) THEN
+  writeFreq = 1000
 
-      ! Write all per-atom data positions and grain assignments
+  if (MOD(ISTEP, writeFreq) .EQ. 0) then
+    !Write the atom pos and box size from LAMMPS
+    call lmpSystem%writeData(dataPath)
 
-      WRITE (FILENAME, '(A17, I0, A4)') './RESTART/RESTART', ISTEP, '.OUT'
+    if (RANK .EQ. 0) then
+      !write restart file with rest of simulation info
+      write(filename, '(A17, I0, A4)') './RESTART/RESTART', ISTEP, '.OUT'
+      open(unit=27, file=trim(filename))
 
-      OPEN (UNIT=27, FILE=TRIM(FILENAME))
+      write(27, *) trim(datapath)
+      write(27, *)
 
-      WRITE (27, *) NATOMC
-
-      DO I = 1, NATOMC
-
-        WRITE (27, '(3F14.5, I5)') (RA(J, I), J=1, 3), features%grains%grainOccupy(I)
-
-      END DO
-
-      !SIMULATION MEASUREMENTS AND PARAMETERS
-
-      WRITE (27, *)
-
-      WRITE (27, *) &
+      write(27, *) &
         'ISTEP, TIME, TIME_LAST, DTIME, DPA, DPAC, AVDPA, ONDSTOT, EPSX, EPSY, EPSZ'
+      write(27, *) ISTEP
+      write(27, *) TIME
+      write(27, *) TIME_LAST
+      write(27, *) DTIME
+      write(27, *) DPA
+      write(27, *) DPAC
+      write(27, *) AVDPA
+      write(27, *) ONDSTOT
+      write(27, *) EPSX
+      write(27, *) EPSY
+      write(27, *) EPSZ
+      write(27, *)
 
-      WRITE (27, *) ISTEP
-      WRITE (27, *) TIME
-      WRITE (27, *) TIME_LAST
-      WRITE (27, *) DTIME
-      WRITE (27, *) DPA
-      WRITE (27, *) DPAC
-      WRITE (27, *) AVDPA
-      WRITE (27, *) ONDSTOT
-      WRITE (27, *) EPSX
-      WRITE (27, *) EPSY
-      WRITE (27, *) EPSZ
+      !Write defect migration energies
+      write (27, *) 'Vacancy Migration Energies'
+      do i = 1, 50
 
-      !AVERAGE DEFECT MIGRATION ENERGIES
+        write (27, *) EMIG(1, I), EMIC(1, I)
+      end do
 
-      WRITE (27, *)
+      write (27, *) 'Interstitial Migration Energies'
+      do i = 1, 50
 
-      WRITE (27, *) 'MIGRATION ENERGIES (VACANCIES THEN INTERSTITIALS)'
+        write (27, *) EMIG(2, I), EMIC(2, I)
+      end do
+      write(27, *)
 
-      DO I = 1, 50
-        WRITE (27, *) EMIG(1, I), EMIC(1, I)
-      END DO
+      !Write atom grain assignments
+      write(27, *) 'Grain Assignments'
+      write(27, *) NATOMC
+      do i = 1, natomc
 
-      DO I = 1, 50
-        WRITE (27, *) EMIG(2, I), EMIC(2, I)
-      END DO
+        write(27, '(I0)') features%grains%grainOccupy(I)
+      end do
 
-    END IF
+      close (27)
+    end if
 
-    CLOSE (27)
+  end if
 
-  END IF
-
-END SUBROUTINE
+end subroutine
 !***********************************************************************!
-SUBROUTINE DEFECT_PRINT(DEFECTLIST, NDEFECTS)
+subroutine DEFECT_PRINT(DEFECTLIST, NDEFECTS)
 
   USE SYSTEM, ONLY: NDEMAX
 
-  IMPLICIT NONE
+  implicit none
 
   REAL*8 :: DEFECTLIST(7, NDEMAX)
   INTEGER :: NDEFECTS
@@ -626,32 +625,32 @@ SUBROUTINE DEFECT_PRINT(DEFECTLIST, NDEFECTS)
   INTCLUSTERCOUNTS = 0; VACCLUSTERCOUNTS = 0
 
   !DETERMINE WHAT CLUSTER SIZES TO PRINT IN THE TABLE
-  DO I = 1, NDEFECTS
-    IF (.NOT. ANY(INTSIZES == INT(DEFECTLIST(6, I))) .AND. INT(DEFECTLIST(6, I)) > 0) THEN
+  do I = 1, NDEFECTS
+    if (.NOT. ANY(INTSIZES == INT(DEFECTLIST(6, I))) .AND. INT(DEFECTLIST(6, I)) > 0) then
       INTSIZES(INTCOUNT + 1) = INT(DEFECTLIST(6, I))
       INTCOUNT = INTCOUNT + 1
-    ELSE IF (.NOT. ANY(VACSIZES == INT(DEFECTLIST(6, I))) .AND. INT(DEFECTLIST(6, I)) < 0) THEN
+    ELSE if (.NOT. ANY(VACSIZES == INT(DEFECTLIST(6, I))) .AND. INT(DEFECTLIST(6, I)) < 0) then
       VACSIZES(VACCOUNT + 1) = INT(DEFECTLIST(6, I))
       VACCOUNT = VACCOUNT + 1
-    END IF
-  END DO
+    end if
+  end do
 
   ! DETERMINE THE COUNT FOR EACH DEFECT SIZE
-  DO I = 1, NDEFECTS
-    IF (DEFECTLIST(6, I) > 0) THEN
-      DO J = 1, INTCOUNT
-        IF (INT(DEFECTLIST(6, I)) == INTSIZES(J)) THEN
+  do I = 1, NDEFECTS
+    if (DEFECTLIST(6, I) > 0) then
+      do J = 1, INTCOUNT
+        if (INT(DEFECTLIST(6, I)) == INTSIZES(J)) then
           INTCLUSTERCOUNTS(J) = INTCLUSTERCOUNTS(J) + 1
-        END IF
-      END DO
+        end if
+      end do
     ELSE
-      DO J = 1, VACCOUNT
-        IF (INT(DEFECTLIST(6, I)) == VACSIZES(J)) THEN
+      do J = 1, VACCOUNT
+        if (INT(DEFECTLIST(6, I)) == VACSIZES(J)) then
           VACCLUSTERCOUNTS(J) = VACCLUSTERCOUNTS(J) + 1
-        END IF
-      END DO
-    END IF
-  END DO
+        end if
+      end do
+    end if
+  end do
 
   ! SORT THE DEFECT LISTS
   CALL QUICKSORT_INT(INTSIZES, INTCLUSTERCOUNTS, 1, INTCOUNT)
@@ -659,39 +658,39 @@ SUBROUTINE DEFECT_PRINT(DEFECTLIST, NDEFECTS)
 
   PRINTFORMAT = '(X,I4,X)'
 
-  !WRITE THE INT TABLE
-  IF (INTCOUNT > 0) THEN
+  !write THE INT TABLE
+  if (INTCOUNT > 0) then
 
-    WRITE (*, '(A9)', ADVANCE="NO") 'Int Size|'
-    DO I = 1, INTCOUNT
-      WRITE (*, PRINTFORMAT, ADVANCE="NO") INTSIZES(I)
-    END DO
-    WRITE (*, *) !NEWLINE
+    write (*, '(A9)', ADVANCE="NO") 'Int Size|'
+    do I = 1, INTCOUNT
+      write (*, PRINTFORMAT, ADVANCE="NO") INTSIZES(I)
+    end do
+    write (*, *) !NEWLINE
 
-    WRITE (*, '(A9)', ADVANCE="NO") 'Count|'
-    DO I = 1, INTCOUNT
-      WRITE (*, PRINTFORMAT, ADVANCE="NO") INTCLUSTERCOUNTS(I)
-    END DO
-    WRITE (*, *) !NEWLINE
-    WRITE (*, *) !NEWLINE
+    write (*, '(A9)', ADVANCE="NO") 'Count|'
+    do I = 1, INTCOUNT
+      write (*, PRINTFORMAT, ADVANCE="NO") INTCLUSTERCOUNTS(I)
+    end do
+    write (*, *) !NEWLINE
+    write (*, *) !NEWLINE
 
-  END IF
+  end if
 
-  !WRITE THE VAC TABLE
-  IF (VACCOUNT > 0) THEN
+  !write THE VAC TABLE
+  if (VACCOUNT > 0) then
 
-    WRITE (*, '(A9)', ADVANCE="NO") 'Vac Size|'
-    DO I = VACCOUNT, 1, -1
-      WRITE (*, PRINTFORMAT, ADVANCE="NO") VACSIZES(I)
-    END DO
-    WRITE (*, *) !NEWLINE
+    write (*, '(A9)', ADVANCE="NO") 'Vac Size|'
+    do I = VACCOUNT, 1, -1
+      write (*, PRINTFORMAT, ADVANCE="NO") VACSIZES(I)
+    end do
+    write (*, *) !NEWLINE
 
-    WRITE (*, '(A9)', ADVANCE="NO") 'Count|'
-    DO I = VACCOUNT, 1, -1
-      WRITE (*, PRINTFORMAT, ADVANCE="NO") VACCLUSTERCOUNTS(I)
-    END DO
-    WRITE (*, *) !NEWLINE
-    WRITE (*, *) !NEWLINE
+    write (*, '(A9)', ADVANCE="NO") 'Count|'
+    do I = VACCOUNT, 1, -1
+      write (*, PRINTFORMAT, ADVANCE="NO") VACCLUSTERCOUNTS(I)
+    end do
+    write (*, *) !NEWLINE
+    write (*, *) !NEWLINE
 
-  END IF
-END SUBROUTINE DEFECT_PRINT
+  end if
+end subroutine DEFECT_PRINT

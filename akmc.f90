@@ -1,32 +1,39 @@
 SUBROUTINE OPLD
 
-  USE SYSTEM, ONLY: BSTEP, NTSTEP, ISTEP, RANK, SKIP
-  USE DEFECT, ONLY: UPNEIGH
+  use system
+  use lmp_driver
+  use MicroStrucFeatures
 
   IMPLICIT NONE
 
+  if (BSTEP == 0) then
+    call lmpSystem%relaxSystemPressure()
+    call lmpSystem%getPositions()
+    call features%grains%init(lmpSystem, MGSZ)
+    call features%grains%identifyGrains()
+    call features%reflat%createRefLattice(features%grains)
+  end if
+
   DO ISTEP = (BSTEP + 1), (NTSTEP + BSTEP)
 
-    CALL DOSE
+    CALL DOSE()
 
-    CALL FIND_DEFECT
+    CALL FIND_DEFECT()
 
     IF (RANK .EQ. 0) THEN
-      CALL DCIDNT
-      CALL DFSEL
+      CALL DCIDNT()
+      CALL DFSEL()
     END IF
 
-    CALL SPS
-    CALL KMC
-    IF (.NOT. SKIP) CALL OPT
-    CALL RESTART
+    CALL SPS()
+    CALL KMC()
+    IF (.NOT. SKIP) CALL OPT()
+    CALL RESTART()
 
   END DO
 
 END SUBROUTINE
 !***********************************************************************!
-!THIS SUBROUTINE IS TO PERFORM SADDLE POINT SEARCHING
-
 SUBROUTINE SPS
 
   USE MPI
@@ -130,9 +137,6 @@ SUBROUTINE SPS
   RETURN
 END SUBROUTINE
 !***********************************************************************!
-
-!STATIC RELAXATION OF THE SYSTEM
-
 SUBROUTINE OPT
 
   USE SYSTEM
@@ -181,7 +185,7 @@ SUBROUTINE OPT
       WRITE (*, '(3X, 2A12, 7A14)') 'STEP', 'DIMER ID', 'BARRIER', &
         'SYS ENERGY', 'TIME', 'Px', 'Py', 'Pz', 'DPA'
 
-      WRITE (*, '(A,2I12,2F14.5,4E14.5,E14.5)') 'ITR', ISTEP, EID, EM(EID), &
+      WRITE (*, '(A,2I12,2F14.5,4ES14.5,E14.5)') 'ITR', ISTEP, EID, EM(EID), &
         ENCALC, TIME, PRESS(1), PRESS(2), PRESS(3), DPA
 
       WRITE(*,*)
@@ -201,8 +205,6 @@ SUBROUTINE OPT
 END SUBROUTINE OPT
 
 !***********************************************************************!
-!THIS SUBROUTINE IS TO IDENTIFY DEFECT CLUSTERS IN THE SYSTEM
-
 SUBROUTINE DCIDNT
   use SYSTEM
   use DEFECT
@@ -337,7 +339,6 @@ SUBROUTINE DFSEL
 
   IMPLICIT NONE
 
-  REAL*8 PTEMP(7, 1)
   REAL*8 rnd, speed, dt, scalef, sump, prop
   real*8 :: x,y,z,r
   integer :: i, j, k, jmapsz, numClusters
@@ -423,9 +424,6 @@ SUBROUTINE DFSEL
 END SUBROUTINE DFSEL
 
 !***********************************************************************!
-!THIS SUBROUTINE IS TO CHOSE AV BASED ON THE MIRGRATION ENERGY BARRIERS
-!THE CONVENTIONAL KINETIC MONTE CARLO ALGORITHM IS USED
-
 SUBROUTINE KMC
 
   USE SYSTEM
@@ -556,8 +554,6 @@ SUBROUTINE KMC
 
 END SUBROUTINE KMC
 !***********************************************************************!
-!WILL INTRODUCE MORE DEFECTS AFTER A SPECIFIED AMOUNT OF TIME THAT MATCHES
-!EXPERIMENTAL DOSE RATE
 SUBROUTINE DOSE
 
   USE SYSTEM
@@ -568,21 +564,12 @@ SUBROUTINE DOSE
 
   IF (TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 1) THEN
 
-    IF (RANK .EQ. 0) THEN
+    if (RANK .EQ. 0) THEN
+      write (*, '(3A14)') 'TIME', ' TIME_LAST', ' DTIME'
+      write (*, '(2E14.5,E14.5)') TIME, TIME_LAST, DTIME
+    end if
 
-      WRITE (*, '(3A14)') 'TIME', ' TIME_LAST', ' DTIME'
-
-      WRITE (*, '(2E14.5,E14.5)') TIME, TIME_LAST, DTIME
-
-    END IF
-
-    call lmpSystem%relaxSystemPressure
-
-    call lmpSystem%getPositions
-
-    call lmpSystem%updateRef
-
-    IF (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN ! Frenkel or Vacancy
+    IF (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
 
       CALL BASIC_DAMAGE(NFREKL)
 
