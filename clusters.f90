@@ -78,16 +78,11 @@ Module Clusters
 contains
 
   !***********************************************************************!
-  subroutine expandCluster(this, x, y, z, id, type)
+  subroutine expandCluster(this, id, type)
     !Will add the species id to the correct data array
 
     class(SingleCluster), intent(inout) :: this
     integer, intent(in) ::id, type
-    real*8, intent(in) :: x, y, z
-
-    integer :: comCount
-    real*8 :: PBC, xloc, yloc, zloc
-    logical :: iflagx, iflagy, iflagz
 
     if (this%atomCount+1 > MAXCLUSTERSIZE) then
       write(*,'(A)') 'SingleCluster Error: Atom set bounds exceeded'
@@ -142,7 +137,7 @@ contains
     class(SingleCluster), intent(in) :: cluster2
     logical :: isSameCluster
 
-    integer :: i,j
+    integer :: i
     
     if (this%atomCount /= cluster2%atomCount .or. &
       this%atomCount /= cluster2%atomCount) then
@@ -200,8 +195,9 @@ contains
     integer :: i, index, id, count
     real*8 :: x, y, z
     logical :: iflagx, iflagy, iflagz
+    integer, allocatable, dimension(:) :: intIds, vacIds
     real*8, allocatable, dimension(:,:) :: pos
-    real*8, allocatable, dimension(:) :: defectIds, defectType, intIds, vacIds
+    real*8, allocatable, dimension(:) :: defectIds, defectType
     logical, allocatable, dimension(:) :: mask
 
     allocate(pos(3,numDefects))
@@ -351,7 +347,7 @@ contains
     !Adds or subtracts half the box distance to place the defect away from
     !box boundaries.
 
-    use system, only: rbh1, rbh2, epsx, epsy, epsz
+    use system, only: rbh1, epsx, epsy, epsz
 
     class(SingleCluster), intent(inout) :: this
     real*8, intent(inout) :: x, y, z
@@ -492,7 +488,7 @@ contains
             id = int(defectId(k)); type = int(defectType(k))
             checked(k) = .True.
 
-            call clusters(clusterId)%expandCluster(x, y, z, id, type)
+            call clusters(clusterId)%expandCluster(id, type)
 
             call bg%getNearestNeighbors(x, y, z, thresh*1.5)!remove 1.5
 

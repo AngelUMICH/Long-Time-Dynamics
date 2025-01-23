@@ -166,7 +166,6 @@ contains
 
     class(BinGrid), intent(inout) :: this
     real*8, intent(in) :: x, y, z, l
-    integer, dimension(maxNeighborSize) :: neighborAtoms
 
     integer :: i, j, k
     integer :: xBinId, yBinId, zBinId, cxBinId, cyBinId, czBinId
