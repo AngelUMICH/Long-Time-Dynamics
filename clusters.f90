@@ -250,7 +250,7 @@ contains
 
         id = intIds(i)
         x = pos(1, id); y = pos(2, id); z = pos(3, id)
-        call this%centerDefect(x, y, z, iflagx, iflagy, iflagz)
+        call this%centerDefect(pos(1,id),pos(2,id),pos(3,id), iflagx, iflagy, iflagz)
       end do
 
       !Do vacs
@@ -258,7 +258,7 @@ contains
 
         id = vacIds(i)
         x = pos(1, id); y = pos(2, id); z = pos(3, id)
-        call this%centerDefect(x, y, z, iflagx, iflagy, iflagz)
+        call this%centerDefect(pos(1,id),pos(2,id),pos(3,id), iflagx, iflagy, iflagz)
       end do
     end if
     
