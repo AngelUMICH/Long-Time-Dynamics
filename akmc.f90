@@ -14,128 +14,94 @@ SUBROUTINE OPLD
     call features%reflat%createRefLattice(features%grains)
   end if
 
-  DO ISTEP = (BSTEP + 1), (NTSTEP + BSTEP)
+  do ISTEP = (BSTEP + 1), (NTSTEP + BSTEP)
 
-    CALL DOSE()
+    call DOSE()
 
-    CALL FIND_DEFECT()
+    call FIND_DEFECT()
 
-    IF (RANK .EQ. 0) THEN
-      CALL DCIDNT()
-      CALL DFSEL()
-    END IF
+    if (RANK .EQ. 0) THEN
+      call DCIDNT()
+      call DFSEL()
+    end if
 
-    CALL SPS()
-    CALL KMC()
-    IF (.NOT. SKIP) CALL OPT()
-    CALL RESTART()
+    call SPS()
+    call KMC()
+    if (.NOT. SKIP) call OPT()
+    call RESTART()
 
-  END DO
+  end do
 
-END SUBROUTINE
+end SUBROUTINE
 !***********************************************************************!
-SUBROUTINE SPS
+subroutine SPS
 
-  USE MPI
-  USE SYSTEM
-  USE DEFECT
-  USE KMCVAR
+  use MPI
+  use SYSTEM
+  use DEFECT
+  use KMCVAR
 
-  USE CLASS_DIMER
-  USE LMP_DRIVER
+  use CLASS_DIMER
+  use LMP_DRIVER
   use MicroStrucFeatures
 
-  IMPLICIT NONE
+  implicit none
 
-  TYPE(DIMER) :: ADIMER
+  type(Dimer) :: ADIMER
 
-  INTEGER :: J, K
+  integer :: J, K, SR_LEN
+  real*8 :: x,y,z,r
 
-  INTEGER :: RA_LEN, SR_LEN
-
-  !CLEAR ALL DATA
-
-  SR = 0.0D0
-  IF (RANK .EQ. 0) SRBUFF = 0.0D0
-  EM = 0.0D0
-  IF (RANK .EQ. 0) EMBUFF = 0.0D0
-  ND = 0.0D0
-  IF (RANK .EQ. 0) NDBUFF = 0.0D0
-
-  !MPI VARIABLES
-
-  RA_LEN = SIZE(RA)
-
+  SR = 0.0D0; if (RANK .EQ. 0) SRBUFF = 0.0D0
+  EM = 0.0D0; if (RANK .EQ. 0) EMBUFF = 0.0D0
+  ND = 0.0D0; if (RANK .EQ. 0) NDBUFF = 0.0D0
   SR_LEN = SIZE(SR)
 
-  !TODO Eliminate obtaining info from features to put in px
-  if (rank .eq. 0) then
-    px(1,1) = features%defects%selectedCluster%comx
-    px(2,1) = features%defects%selectedCluster%comy
-    px(3,1) = features%defects%selectedCluster%comz
-    px(4,1) = features%defects%selectedCluster%radiusAV
-  end if
-
-  CALL MPI_BCAST(RA, RA_LEN, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
-
-  CALL MPI_BCAST(NATOMC, 1, MPI_INT, 0, lmpSystem%getCommunicator(), IERR)
-
-  CALL MPI_BCAST(PX, 7*NDEMAX, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
+  call features%defects%syncClusterData(lmpSystem%getCommunicator())
+  x = features%defects%selectedCluster%comx
+  y = features%defects%selectedCluster%comy
+  z = features%defects%selectedCluster%comz
+  r = features%defects%selectedCluster%radiusAV
 
   !CARRY OUT SADDLE POINT SEARCHING
+  do J = LDIMERI, UDIMERI
 
-  DO J = LDIMERI, UDIMERI
+    call DIMER_INIT(ADIMER, x, y, z, r, lmpDimer)
+    call DIMER_SEARCH(ADIMER)
 
-    CALL DIMER_INIT(ADIMER, PX(1, 1), PX(2, 1), PX(3, 1), PX(4, 1), lmpDimer)
-
-    CALL DIMER_SEARCH(ADIMER)
-
-    !STORE INFORMATION,EM:MIGRATION ENERGY BARRIER
-    !ND:TOTAL NUMBER OF ATOMS IN THE AV
-
-    IF (lmpDimer%getRank() .EQ. 0) THEN
+    if (lmpDimer%getRank() .EQ. 0) then
       ND(J) = ADIMER%NATOM1
       EM(J) = ADIMER%EMDIFF
     
-
       !STORE THE SADDLE POINT CONFIGURATION,SR:POSITION OF SADDLE POINT
-
-      DO K = 1, ND(J)
+      do K = 1, ND(J)
 
         SR(1, K, J) = ADIMER%SX(1, K)
         SR(2, K, J) = ADIMER%SX(2, K)
         SR(3, K, J) = ADIMER%SX(3, K)
         SR(4, K, J) = ADIMER%SI(1, K)
+      end do
+    end if
 
-      END DO
+    if (mod(ISTEP, NFREQ) .eq. 0 .and. lmpDimer%getRank() .eq. 0) then
+      write (*, '(A,1I12,F14.5)') 'SPS', J, EM(J)
+    end if
 
-    END IF
+    call DIMER_FINISH(ADIMER)
+  end do
 
-    IF (MOD(ISTEP, NFREQ) .EQ. 0 .AND. lmpDimer%getRank() .EQ. 0) THEN
-      WRITE (*, '(A,1I12,F14.5)') 'SPS', J, EM(J)
-    END IF
+  !Gather data on main rank
+  call MPI_REDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
+  call MPI_REDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
+  call MPI_REDUCE(ND, NDBUFF, NDIMER, MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
 
-    CALL DIMER_FINISH(ADIMER)
-
-  END DO
-
-  !GATHER RESULTS ON MAIN RANK
-  CALL MPI_REDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
-  CALL MPI_REDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
-  CALL MPI_REDUCE(ND, NDBUFF, NDIMER, MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
-
-  IF (RANK .EQ. 0) THEN
-
+  if (rank .eq. 0) then
     SR = SRBUFF
-
     EM = EMBUFF
-
     ND = NDBUFF
+  end if
 
-  END IF
-
-  RETURN
-END SUBROUTINE
+end subroutine
 !***********************************************************************!
 SUBROUTINE OPT
 
@@ -149,7 +115,7 @@ SUBROUTINE OPT
 
   INTEGER I, J, NSTMP
 
-  IF (RANK .EQ. 0) THEN
+  if (RANK .EQ. 0) THEN
 
     !THE TOTAL NUMBER OF THE ATOMS INSIDE THE CHOSEN AV
 
@@ -157,7 +123,7 @@ SUBROUTINE OPT
 
     !PASSING THE POSITIONS OF ATOMS INSIDE AV TO THE SYSTEM
 
-    DO I = 1, NSTMP
+    do I = 1, NSTMP
 
       J = INT(SR(4, I, EID))
 
@@ -165,9 +131,9 @@ SUBROUTINE OPT
       RA(2, J) = SR(2, I, EID)
       RA(3, J) = SR(3, I, EID)
 
-    END DO
+    end do
 
-  END IF
+  end if
 
   call lmpSystem%assignPositions
 
@@ -175,34 +141,34 @@ SUBROUTINE OPT
 
   call lmpSystem%getPositions
 
-  IF (RANK .EQ. 0) THEN
+  if (RANK .EQ. 0) THEN
 
     !ISTEP:CURRENT NUMBER OF STEPS,NDTOT:TOTAL NUMBER OF DEFECTS
     !JID:DEFECT ID,EID:EVENT ID,EM:MIGRATION ENERGY BARRIER
     !ENCALC:THE SYSTEM ENERGY AFTER OPT,TIME:CURRENT TIME
 
-    IF (MOD(ISTEP, NFREQ) .EQ. 0) THEN
-      WRITE (*, '(3X, 2A12, 7A14)') 'STEP', 'DIMER ID', 'BARRIER', &
+    if (MOD(ISTEP, NFREQ) .EQ. 0) THEN
+      write (*, '(3X, 2A12, 7A14)') 'STEP', 'DIMER ID', 'BARRIER', &
         'SYS ENERGY', 'TIME', 'Px', 'Py', 'Pz', 'DPA'
 
-      WRITE (*, '(A,2I12,2F14.5,4ES14.5,E14.5)') 'ITR', ISTEP, EID, EM(EID), &
+      write (*, '(A,2I12,2F14.5,4ES14.5,E14.5)') 'ITR', ISTEP, EID, EM(EID), &
         ENCALC, TIME, PRESS(1), PRESS(2), PRESS(3), DPA
 
-      WRITE(*,*)
+      write(*,*)
 
-    END IF
+    end if
 
-  END IF
+  end if
 
   !OUTPUT DEFECTS FOR OVITO
 
-  CALL FIND_DEFECT
+  call FIND_DEFECT
 
-  IF (MOD(ISTEP, NFREQ) .EQ. 0 .AND. RANK .EQ. 0) CALL OVITO
+  if (MOD(ISTEP, NFREQ) .EQ. 0 .AND. RANK .EQ. 0) call OVITO
 
   RETURN
 
-END SUBROUTINE OPT
+end SUBROUTINE OPT
 
 !***********************************************************************!
 SUBROUTINE DCIDNT
@@ -303,26 +269,20 @@ SUBROUTINE DCIDNT
   if (mod(ISTEP, NFREQ) .eq. 0) then
     call DEFECT_PRINT(PX, NDTOT)
     call features%defects%printBannedCount()
+    call flush(6)
   end if
 
-  call flush(6)
-
   NDSTOT = max(sumInt, sumVac)
-
   if (CALC) call MD_DPA
-
   ONDTOT = NDTOT
-
   ONDSTOT = NDSTOT
-
-!IF NO DEFECT IS PRESENT, STOP THE PROGRM
 
   if (NDTOT .EQ. 0) then
     write (*, *) 'No defects in system. Stopping.'
     stop
   end if
 
-END SUBROUTINE DCIDNT
+end SUBROUTINE DCIDNT
 !***********************************************************************!
 !************************************************************
 ! Idea is to decrease dimer search for defects using KMC    *
@@ -378,7 +338,7 @@ SUBROUTINE DFSEL
   dt = 1.0/speed
   scalef = dt*float(jmapsz)
 
-  CALL RANDOM_NUMBER(RND)
+  call RANDOM_NUMBER(RND)
 
   prop = rnd*float(jmapsz)
 
@@ -404,49 +364,44 @@ SUBROUTINE DFSEL
 
   OBFQSUM = SPEED - pj(k, i)*scalef !rate sum of all other non chosen clusters
 
-  PX = 0.0D0
-
-!PLACE SELECTED DEFECT IN THE FIRST POSITION
+  x = features%defects%selectedCluster%comx
+  y = features%defects%selectedCluster%comy
+  z = features%defects%selectedCluster%comz
+  r = features%defects%selectedCluster%radiusAV
+  clusterType = features%defects%selectedCluster%type
 
   if (mod(ISTEP, NFREQ) .eq. 0) then
-    x = features%defects%selectedCluster%comx
-    y = features%defects%selectedCluster%comy
-    z = features%defects%selectedCluster%comz
-    r = features%defects%selectedCluster%radiusAV
-    clusterType = features%defects%selectedCluster%type
-
     write (*, '(15X,5(A10,X))') 'X', 'Y', 'Z', 'RADIUS', 'TYPE'
     write (*, '(A15,4(F10.3,X),I10)') 'Selected Defect', x, y, z, r, clusterType
   end if
 
   deallocate (pj)
 
-END SUBROUTINE DFSEL
+end SUBROUTINE DFSEL
 
 !***********************************************************************!
 SUBROUTINE KMC
 
-  USE SYSTEM
-  USE KMCVAR
-  USE DEFECT
-  USE MPI
-  USE LMP_DRIVER
-  USE MicroStrucFeatures
+  use SYSTEM
+  use KMCVAR
+  use DEFECT
+  use MPI
+  use LMP_DRIVER
+  use MicroStrucFeatures
 
-  IMPLICIT NONE
+  implicit none
 
-  INTEGER I, K, jmapsz
+  integer :: I, K, jmapsz, type
 
-  REAL*8 RND, dt, scalef, prop, TOTFQSUM
+  real*8 RND, dt, scalef, prop, TOTFQSUM, x, y, z
 
   logical ban
 
-  CHARACTER(LEN=40) STR
+  character(LEN=40) str
 
-  IF (RANK .EQ. 0) THEN
+  if (rank .eq. 0) then
 
 !FQSUM:SUM OF FREQUENCY,POSUM:SUM OF PROBABILITIES(FOR CHECK ONLY)
-
     FQSUM = 0.0D0
     TOTFQSUM = 0.0D0
     POSUM = 0.0D0
@@ -457,78 +412,70 @@ SUBROUTINE KMC
 !THE PREFACTOR CALCUATED ON THE FLY IS IMPLEMENTED IN ANOTHER VERSION
 ! Now considering good dimer search - Gao 2021
 
-    DO K = 1, NDIMER
+    do K = 1, NDIMER
+
       if (EM(k) .lt. 10) then
         FQ(K) = 1.0D12*EXP(-EM(K)/KB/TEMP)
         FQSUM = FQSUM + FQ(K)
       end if
-    END DO
+    end do
 
-    CALL RANDOM_NUMBER(RND)
+    call RANDOM_NUMBER(RND)
     prop = rnd*float(jmapsz)
 
     !DETERMINE TIME STEP IN KMC
-
     if (FQSUM .gt. 0.0) then
       TMEAN = -LOG10(RND)/(FQSUM+OBFQSUM) !With time correction using other objects FQs
-
       dt = 1.0/fqsum
       scalef = dt*dfloat(jmapsz)
     end if
 
-    DO K = 1, NDIMER
+    do K = 1, NDIMER
+
       if (EM(k) .lt. 10.0) then
         POSUM = POSUM + FQ(K)*scalef
       end if
       if (POSUM .ge. prop) exit
-    END DO
+    end do
 
     !EID:THE ID OF THE EVENT THAT IS CHOSEN
 
     EID = K
 
     !UPDATING THE PRE-SELECTION ENERGIES
-
-    IF (PX(6, 1) .LT. 0) THEN
+    x = features%defects%selectedCluster%comx
+    y = features%defects%selectedCluster%comy
+    z = features%defects%selectedCluster%comz
+    type = features%defects%selectedCluster%type
+    if (type .lt. 0) then
       K = 1
-    ELSE
+    else
       K = 2
-    END IF
+    end if
 
     !CHECKING FOR TOO HIGH TRANSITION ENERGY
 
-    IF (EM(EID) .LE. EMSKIP .AND. EID .LE. NDIMER) THEN
-
+    if (EM(EID) .LE. EMSKIP .AND. EID .LE. NDIMER) THEN
       TIME = TIME + TMEAN
 
       !ONLY POSITIVE SADDLE POINT ENERGIES WILL BE USED IN AVERAGE
-
-      IF (EM(EID) .GT. 0) THEN
-
-        I = ABS(INT(PX(6, 1)))
-
+      if (EM(EID) .GT. 0) THEN
+        I = abs(type)
         EMIG(K, I) = (EMIG(K, I)*EMIC(K, I) + EM(EID))/(EMIC(K, I) + 1)
-
         EMIC(K, I) = EMIC(K, I) + 1
-
-      END IF
-
-    ELSE
-
+      end if
+    else
       SKIP = .TRUE.
-
-      WRITE (STR, '(F8.5)') EMSKIP
-
-      WRITE (6, *) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)// &
+      write (STR, '(F8.5)') EMSKIP
+      write (6, *) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)// &
         'eV -> SKIPPING'
+    end if
 
-    END IF
+    if (MOD(ISTEP, NFREQ) .EQ. 0) THEN
+      write (6, '(A,I10,A,F10.4)') 'EID: ', EID, '  RND: ', RND
+    end if
 
-    IF (MOD(ISTEP, NFREQ) .EQ. 0) THEN
-      WRITE (6, '(A,I10,A,F10.4)') 'EID: ', EID, '  RND: ', RND
-    END IF
-
-  END IF
+  end if
 
   ! If defect had no significant energy barriers ban that defect
   ban = .true.
@@ -540,19 +487,17 @@ SUBROUTINE KMC
 
   if (ban) then
     call features%defects%banCluster(features%defects%selectedCluster)
-    if (rank == 0) write(*,'(A,3F14.5)') 'Banned defect at: ', PX(1,1),PX(2,1),PX(3,1)
+    if (rank == 0) write(*,'(A,3F14.5)') 'Banned defect at: ', x, y, z
   end if
 
   ! Update important data to all procs
-  CALL MPI_BCAST(TIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
-
-  CALL MPI_BCAST(DTIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
-
-  CALL MPI_BCAST(SKIP, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), IERR)
+  call MPI_BCAST(TIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
+  call MPI_BCAST(DTIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
+  call MPI_BCAST(SKIP, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), IERR)
 
   RETURN
 
-END SUBROUTINE KMC
+end SUBROUTINE KMC
 !***********************************************************************!
 SUBROUTINE DOSE
 
@@ -562,20 +507,20 @@ SUBROUTINE DOSE
 
   IMPLICIT NONE
 
-  IF (TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 1) THEN
+  if (TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 1) THEN
 
     if (RANK .EQ. 0) THEN
       write (*, '(3A14)') 'TIME', ' TIME_LAST', ' DTIME'
       write (*, '(2E14.5,E14.5)') TIME, TIME_LAST, DTIME
     end if
 
-    IF (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
+    if (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
 
-      CALL BASIC_DAMAGE(NFREKL)
+      call BASIC_DAMAGE(NFREKL)
 
       call lmpSystem%assignPositions
 
-    END IF
+    end if
 
     call lmpSystem%relaxSystemEnergy
 
@@ -583,11 +528,11 @@ SUBROUTINE DOSE
 
     TIME_LAST = TIME
 
-    IF (RANK == 0) CALC = .TRUE.
+    if (RANK == 0) CALC = .TRUE.
 
     call features%defects%clearBannedList()
 
-  END IF
+  end if
 
-END SUBROUTINE
+end SUBROUTINE
 !***********************************************************************!
