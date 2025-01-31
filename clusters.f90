@@ -70,6 +70,8 @@ Module Clusters
     procedure :: clearBannedList
     !Print count of banned clusters
     procedure :: printBannedCount
+    !Use MPI to sync cluster data across all ranks
+    procedure :: syncClusterData
 
   end type DefectClusters
 
@@ -653,6 +655,28 @@ contains
     write(*,*)
 
   end subroutine printBannedCount
+  !***********************************************************************!
+  subroutine syncClusterData(this, comm)
+    !Sync the data of the selected cluster across all ranks. This is because
+    !selection is only done by one rank. Not necessary to sync atom ids or
+    !ref ids since this info is not needed for dimer searches.
+
+    use mpi
+
+    class(DefectClusters), intent(inout) :: this
+    integer, intent(in) :: comm
+
+    integer :: ierr
+
+    call MPI_BCAST(this%selectedCluster%comx, 1, MPI_REAL8, 0, comm, ierr)
+    call MPI_BCAST(this%selectedCluster%comy, 1, MPI_REAL8, 0, comm, ierr)
+    call MPI_BCAST(this%selectedCluster%comz, 1, MPI_REAL8, 0, comm, ierr)
+    call MPI_BCAST(this%selectedCluster%radiusAV, 1, MPI_REAL8, 0, comm, ierr)
+    call MPI_BCAST(this%selectedCluster%type, 1, MPI_INT, 0, comm, ierr)
+    call MPI_BCAST(this%selectedCluster%atomCount, 1, MPI_INT, 0, comm, ierr)
+    call MPI_BCAST(this%selectedCluster%refCount, 1, MPI_INT, 0, comm, ierr)
+    
+  end subroutine syncClusterData
   !***********************************************************************!
 
 end module Clusters
