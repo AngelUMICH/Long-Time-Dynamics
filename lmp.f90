@@ -320,7 +320,7 @@ contains
     if (mod(ISTEP, NFREQ) .eq. 0 .and. RANK .eq. 0) write (*, '(A)') 'Relaxing System'
 
     call lammps_command(this%lammpsInstance, 'min_style cg')
-    call lammps_command(this%lammpsInstance, 'minimize 1.0e-10 1.0e-10 1000 10000')
+    call lammps_command(this%lammpsInstance, 'minimize 1.0e-13 1.0e-13 2000 15000')
 
     call lammps_extract_compute(this%pressure, this%lammpsInstance, 'thermo_press', LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR)
 
