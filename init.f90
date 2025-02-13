@@ -198,40 +198,43 @@ subroutine sysInit
 
   SKIP = .FALSE.
 
-  if (.not. allocated(EMIG)) allocate(EMIG(2, 50)); EMIG = 0
-  if (.not. allocated(EMIC)) allocate(EMIC(2, 50)); EMIC = 1
+  ! Read defect energies only if not in restart mode 
+  if (REST .eq. 1) then
+    if (.not. allocated(EMIG)) allocate(EMIG(2, 50)); EMIG = 0
+    if (.not. allocated(EMIC)) allocate(EMIC(2, 50)); EMIC = 1
 
-  inquire (FILE='emig.dat', EXIST=EXISTS)
-  if (.NOT. EXISTS) THEN
-    write (*, *) "File 'emig.dat' cannot be found"
-    stop
+    inquire (FILE='emig.dat', EXIST=EXISTS)
+    if (.NOT. EXISTS) THEN
+      write (*, *) "File 'emig.dat' cannot be found"
+      stop
+    end if
+
+    open (UNIT=11, FILE='emig.dat')
+
+    !Read vacancy mig. energies
+    read (11, *)
+    read (11, *) NEMIG
+
+    do I = 1, NEMIG
+      read (11, *) EMIG(1, I)
+    end do
+    do I = NEMIG + 1, 50
+      EMIG(1, I) = 3.5
+    end do
+
+    !Read interstitial mig. energies
+    read (11, *)
+    read (11, *) NEMIG
+
+    do I = 1, NEMIG
+      read (11, *) EMIG(2, I)
+    end do
+    do I = NEMIG + 1, 50
+      EMIG(2, I) = 3.0
+    end do
+
+    close (11)
   end if
-
-  open (UNIT=11, FILE='emig.dat')
-
-  !Read vacancy mig. energies
-  read (11, *)
-  read (11, *) NEMIG
-
-  do I = 1, NEMIG
-    read (11, *) EMIG(1, I)
-  end do
-  do I = NEMIG + 1, 50
-    EMIG(1, I) = 3.5
-  end do
-
-  !Read interstitial mig. energies
-  read (11, *)
-  read (11, *) NEMIG
-
-  do I = 1, NEMIG
-    read (11, *) EMIG(2, I)
-  end do
-  do I = NEMIG + 1, 50
-    EMIG(2, I) = 3.0
-  end do
-
-  close (11)
 
   RETURN
 
