@@ -9,7 +9,7 @@ GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always --tags)
 BUILD_DIR = Obj_files
 OBJS_names = LAMMPS.o LAMMPS-wrapper.o version.o bins.o define.o lmp.o queue.o clusters.o helper.o ptm.o grain.o reflat.o feat.o init.o funct.o dimer.o main.o akmc.o
 OBJS = $(OBJS_names:%=$(BUILD_DIR)/%)
-FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form #-fcheck=all
+FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form -I$(BUILD_DIR) #-fcheck=all
 LIBS = -lgomp -lstdc++ -lm -ldl #-lmpi -lmpi_cxx
 
 TARGET = opld
