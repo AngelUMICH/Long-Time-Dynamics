@@ -210,7 +210,7 @@ contains
     ! selecting the most popular grain type. This method is not purely
     ! deterministic. 
 
-    use SYSTEM, only: NATOMC, RA, RBOX, EPSX, EPSY, EPSZ
+    use SYSTEM, only: NATOMC, RA, boxx, boxy, boxz
     use Bins
 
     implicit none
@@ -227,7 +227,7 @@ contains
 
     type(BinGrid) :: bg
 
-    call bg%initBinGrid(10,10,10, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+    call bg%initBinGrid(10,10,10, boxx, boxy, boxz)
     call bg%assignAtomsToBins(RA, natomc)
 
     delta = thresh*thresh

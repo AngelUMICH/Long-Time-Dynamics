@@ -10,7 +10,7 @@ contains
 
     use Queue
     use Bins
-    use SYSTEM, only: RBOX, EPSX, EPSY, EPSZ
+    use System, only: boxx, boxy, boxz
 
     implicit none
 
@@ -31,7 +31,7 @@ contains
     type(BinGrid) :: bg
 
     !ALGO CAN BE IMPROVED WITH BINS AND FASTER ALGO CHOICE
-    call bg%initBinGrid(30,30,30, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+    call bg%initBinGrid(30,30,30, boxx, boxy, boxz)
     call bg%assignAtomsToBins(pos, size(flags))
 
     !Use breadth first search to create clusters

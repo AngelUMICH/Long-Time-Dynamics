@@ -27,6 +27,7 @@ Module LMP_Driver
     procedure :: readSystem
     procedure :: readForce
     procedure :: readRestartSystem
+    procedure :: getBoxDims
     procedure :: getLammpsPtr
     procedure :: getCommunicator
     procedure :: getControlComm
@@ -113,6 +114,8 @@ contains
                               'thermo_pe', LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
     call lammps_extract_compute(this%pressure, this%lammpsInstance, &
                               'thermo_press', LMP_STYLE_GLOBAL, LMP_TYPE_VECTOR)
+
+    call this%getBoxDims()
 
     !Dimer LAMMPS instace should be empty because it will be filled with 
     !atoms during saddle point searches.
@@ -216,6 +219,27 @@ contains
     close(22)
 
   end subroutine readRestartSystem
+!***********************************************************************!
+  subroutine getBoxDims(this)
+    ! Retrieve the system dimension lengths from the LAMMPS instance
+
+    use system
+
+    class(LAMMPS_Container), intent(in) :: this
+
+    real*8 :: xy = 0, yz = 0, xz = 0
+    real*8, dimension(3) :: lmpBoxHi = 0, lmpBoxLo = 0
+    logical, dimension(3) :: periodicity = 0
+    logical :: box_change = 0
+
+    call lammps_extract_box(this%lammpsInstance, lmpBoxLo, lmpBoxHi, &
+                              xy, yz, xz, periodicity, box_change)
+
+    BOXX = (lmpBoxHi(1) - lmpBoxLo(1))/(rlat)
+    BOXY = (lmpBoxHi(2) - lmpBoxLo(2))/(rlat)
+    BOXZ = (lmpBoxHi(3) - lmpBoxLo(3))/(rlat)
+
+  end subroutine getBoxDims
 !***********************************************************************!
   function getLammpsPtr(this) result(lammpsPtr)
 
@@ -343,10 +367,6 @@ contains
 
     class(LAMMPS_Container), intent(inout) :: this
 
-    real*8 :: xy = 0, yz = 0, xz = 0
-    real*8, dimension(3) :: lmpBoxHi = 0, lmpBoxLo = 0
-    logical, dimension(3) :: periodicity = 0
-    logical :: box_change = 0
     character(len=200) :: str
 
     !Pressure relax if enabled. Otherwise energy relax.
@@ -364,16 +384,11 @@ contains
       write(*,'(6E14.5)') PRESS(1), PRESS(2), PRESS(3), PRESS(4), PRESS(5), PRESS(6)
     end if
 
-    !Update strain parameters
-    call lammps_extract_box(this%lammpsInstance, lmpBoxLo, lmpBoxHi, &
-                            xy, yz, xz, periodicity, box_change)
-
-    EPSX = (lmpBoxHi(1) - lmpBoxLo(1))/(rbox*rlat)
-    EPSY = (lmpBoxHi(2) - lmpBoxLo(2))/(rbox*rlat)
-    EPSZ = (lmpBoxHi(3) - lmpBoxLo(3))/(rbox*rlat)
+    ! Get the new system dimensions
+    call this%getBoxDims()
 
     if (rank .eq. 0 .and. SigRelOn) write(*,'(A,3F15.8,A)') &
-    'New system box size (', RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ, ' )'
+    'New system box size (', BOXX, BOXY, BOXZ, ' )'
 
 
   end subroutine relaxSystemPressure
