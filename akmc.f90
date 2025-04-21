@@ -9,6 +9,7 @@ SUBROUTINE OPLD
   if (BSTEP == 0) then
     call lmpSystem%relaxSystemPressure()
     call lmpSystem%getPositions()
+    call lmpDimer%changeBoxDimensions(boxx, boxy, boxz)
     call features%grains%init(lmpSystem, MGSZ)
     call features%grains%identifyGrains()
     call features%reflat%createRefLattice(features%grains)
@@ -240,7 +241,7 @@ SUBROUTINE DCIDNT
     PX(7, NDTOT) = IV(1, j)
   end do
   
-  call features%defects%identifyClusters(PX, NDTOT, 1.0D0)
+  call features%defects%identifyClusters(PX, NDTOT, 1.2D0)
 
   NDTOT = features%defects%numClusters
 
@@ -362,7 +363,7 @@ SUBROUTINE DFSEL
 
   call features%defects%saveClusterSelection(features%defects%clusters(i))
 
-  OBFQSUM = SPEED - pj(k, i)*scalef !rate sum of all other non chosen clusters
+  OBFQSUM = SPEED - pj(k, i) !rate sum of all other non chosen clusters
 
   x = features%defects%selectedCluster%comx
   y = features%defects%selectedCluster%comy
@@ -425,7 +426,7 @@ SUBROUTINE KMC
 
     !DETERMINE TIME STEP IN KMC
     if (FQSUM .gt. 0.0) then
-      TMEAN = -LOG10(RND)/(FQSUM+OBFQSUM) !With time correction using other objects FQs
+      TMEAN = -LOG(RND)/(FQSUM+OBFQSUM) !With time correction using other objects FQs
       dt = 1.0/fqsum
       scalef = dt*dfloat(jmapsz)
     end if

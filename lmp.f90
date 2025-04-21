@@ -36,6 +36,7 @@ Module LMP_Driver
     procedure :: assignPositions
     procedure :: relaxSystemEnergy
     procedure :: relaxSystemPressure
+    procedure :: changeBoxDimensions
     procedure :: writeData
     procedure :: readData
 
@@ -393,6 +394,27 @@ contains
 
   end subroutine relaxSystemPressure
 
+!***********************************************************************!
+  subroutine changeBoxDimensions(this, sizeX, sizeY, sizeZ)
+    ! Change the system box dimensions with the following scaling factors
+    ! for each dimension. The new dimensions are in units of lattice.
+
+    use system, only: rlat
+
+    class(LAMMPS_Container), intent(inout) :: this
+    real*8, intent(in) :: sizeX, sizeY, sizeZ
+
+    character(len=200) :: str, command
+    
+    write(str, '(3(A,F0.14))')  ' x final 0.0 ', sizeX*rlat, &
+                                ' y final 0.0 ', sizeY*rlat, &
+                                ' z final 0.0 ', sizeZ*rlat
+
+    write(command, '(3A)') 'change_box all', trim(str), ' units box'
+
+    call lammps_command(this%lammpsInstance, command)
+
+  end subroutine
 !***********************************************************************!
   subroutine writeData(this, filepath)
     !Create the data restart files needed to continue a simulation on
