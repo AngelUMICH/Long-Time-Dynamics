@@ -44,7 +44,7 @@ contains
 
     !Only use atoms which are not apart of grain boundary in the creation
     !of the reference lattice.
-    bounds = (/0.0D0, RBOX*EPSX, 0.0D0, RBOX*EPSY, 0.0D0, RBOX*EPSZ/)
+    bounds = (/0.0D0, boxx, 0.0D0, boxy, 0.0D0, boxz/)
     call this%filterReferenceLattice(grainData,bounds,RA,natomc)
 
     NATOMR = this%numPoints

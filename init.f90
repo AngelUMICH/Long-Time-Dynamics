@@ -6,9 +6,9 @@ subroutine readInput
   open (UNIT=10, FILE='par_init.dat')
 
   !!readING SYSTEM PARAMTER, SEE PAR_INIT.DAT FOR DETAILS
-  read (10, '( 11(I10/),5(F10.3/),2(I10/),8(F14.6/),(I10/),(ES15.5/),(L/),2(F10.6/),(F10.6) )') &
+  read (10, '( 11(I10/),4(F10.3/),2(I10/),8(F14.6/),(I10/),(ES15.5/),(L/),2(F10.6/),(F10.6) )') &
     REST, TDAM, TPBC, TCRY, NTSTEP, NFREQ, NDEMAX, NAVMAX, NDIMER, TLAT, MGSZ, &
-    RLAT, RBOX, PCUTR, DCUTR, DECUT, NDSMAX, NDRMAX, RDIMER, FNRMAX, FNRMIN, DSTEPF, &
+    RLAT, PCUTR, DCUTR, DECUT, NDSMAX, NDRMAX, RDIMER, FNRMAX, FNRMIN, DSTEPF, &
     DSTEPM, TEMP, PKAE, DRATE, NFREKL, TIME, SIGRELON, SIGX, SIGY, SIGZ
 
   close (10)
@@ -107,11 +107,6 @@ subroutine sysInit
 
   FDCONV = 1.0D-5
 
-  !!HALF OF THE BOX SIZE, FOR PBC use
-
-  RBH1 = RBOX/2.0D0
-  RBH2 = -RBOX/2.0D0
-
   !!POTENTIAL CUTOFF:PAIR TERM
 
   PCUTR = PCUTR/RLAT
@@ -153,9 +148,6 @@ subroutine sysInit
   !! SYSTEM PROPERTIES
 
   PRESS = 0.0D0
-  EPSX = 1.0
-  EPSY = 1.0
-  EPSZ = 1.0
 
   NATOMR = NATOMC
 
@@ -276,9 +268,6 @@ subroutine readRestartParameters
     read(27, *) DPAC
     read(27, *) AVDPA
     read(27, *) ONDSTOT
-    read(27, *) EPSX
-    read(27, *) EPSY
-    read(27, *) EPSZ
     read(27, *)
 
     !Read defect migration energies

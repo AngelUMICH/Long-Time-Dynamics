@@ -324,22 +324,22 @@ contains
     !Checks whether boundary conditions should be respected to calculate
     !geometric center for the 3 coordinates
 
-    use system, only: rbox, epsx, epsy, epsz
+    use system, only: boxx, boxy, boxz
 
     class(SingleCluster), intent(inout) :: this
     real*8, intent(in) :: x, y, z
     logical, intent(inout) :: flagx, flagy, flagz
 
 
-    if (x < 1.0 .or. x > rbox*epsx - 1.0) then
+    if (x < 1.0 .or. x > boxx - 1.0) then
       flagx = .True.
     end if
 
-    if (y < 1.0 .or. y > rbox*epsy - 1.0) then
+    if (y < 1.0 .or. y > boxy - 1.0) then
       flagy = .True.
     end if
 
-    if (z < 1.0 .or. z > rbox*epsz - 1.0) then
+    if (z < 1.0 .or. z > boxz - 1.0) then
       flagz = .True.
     end if
 
@@ -349,33 +349,38 @@ contains
     !Adds or subtracts half the box distance to place the defect away from
     !box boundaries.
 
-    use system, only: rbh1, epsx, epsy, epsz
+    use system, only: boxx, boxy, boxz
 
     class(SingleCluster), intent(inout) :: this
     real*8, intent(inout) :: x, y, z
     logical, intent(in) :: flagx, flagy, flagz
 
+    real*8 :: half
+
     if (flagx) then
-      if (x < rbh1*epsx) then
-        x = x + rbh1*epsx
+      half = boxx/2
+      if (x < half) then
+        x = x + half
       else
-        x = x - rbh1*epsx
+        x = x - half
       end if
     end if
 
     if (flagy) then
-      if (y < rbh1*epsy) then
-        y = y + rbh1*epsy
+      half = boxy/2
+      if (y < half) then
+        y = y + half
       else
-        y = y - rbh1*epsy
+        y = y - half
       end if
     end if
 
     if (flagz) then
-      if (z < rbh1*epsz) then
-        z = z + rbh1*epsz
+      half = boxz/2
+      if (z < half) then
+        z = z + half
       else
-        z = z - rbh1*epsz
+        z = z - half
       end if
     end if
 
@@ -437,7 +442,7 @@ contains
 
     use Queue
     use Bins
-    use SYSTEM, only: RBOX, EPSX, EPSY, EPSZ
+    use SYSTEM, only: boxx, boxy, boxz
 
     implicit none
 
@@ -464,7 +469,7 @@ contains
     defectType = defects(6,1:numDefects)
     defectId = defects(7,1:numDefects)
 
-    call bg%initBinGrid(30,30,30, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+    call bg%initBinGrid(30,30,30, boxx, boxy, boxz)
     call bg%assignAtomsToBins(pos, numDefects)
 
     !Use breadth first search to create clusters

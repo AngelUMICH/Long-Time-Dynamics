@@ -1,27 +1,29 @@
 !!APPLY THE PERIODIC BOUNDARY CONDITION TO THE SYSTEM
 REAL*8 FUNCTION PBC(X, DIM)
 
-  USE SYSTEM, ONLY: RBOX, RBH1, RBH2, EPSX, EPSY, EPSZ
+  use system, only: BOXX, BOXY, BOXZ
 
   implicit none
 
   INTEGER DIM
-  REAL*8 X, EPS
+  REAL*8 X
+
+  real*8 half
 
   if (DIM .EQ. 1) then
-    EPS = EPSX
-  ELSEif (DIM .EQ. 2) then
-    EPS = EPSY
-  ELSEif (DIM .EQ. 3) then
-    EPS = EPSZ
+    half = BOXX/2
+  elseif (DIM .EQ. 2) then
+    half = BOXY/2
+  elseif (DIM .EQ. 3) then
+    half = BOXZ/2
   end if
 
-  if ((X .LE. RBH1*EPS) .AND. (X .GE. RBH2*EPS)) then
+  if ((X .LE. half) .AND. (X .GE. -half)) then
     PBC = X
-  ELSEif (X .LT. RBH2*EPS) then
-    PBC = X + RBOX*EPS
-  ELSE
-    PBC = X - RBOX*EPS
+  elseif (X .LT. -half) then
+    PBC = X + half*2
+  else
+    PBC = X - half*2
   end if
 
   RETURN
@@ -68,7 +70,7 @@ subroutine WignerSeitzAnalysis
 
   implicit none
 
-  REAL*8 RX, RY, RZ, RS, RMIN, FACTOR, PBC
+  REAL*8 RX, RY, RZ, RS, RMIN, PBC
   INTEGER I, J, MIN, N, ATOM
   INTEGER IDHI, IDLO, RID
   INTEGER OCCBUFF(SIZE(OCC))
@@ -81,7 +83,7 @@ subroutine WignerSeitzAnalysis
 
   CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
 
-  CALL RFGRID%initBinGrid(30, 30, 30, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+  CALL RFGRID%initBinGrid(30, 30, 30, BOXX, BOXY, BOXZ)
   CALL RFGRID%assignAtomsToBins(RR, NATOMR)
 
   OC = 0
@@ -89,8 +91,6 @@ subroutine WignerSeitzAnalysis
   OCCBUFF = 0
   TVBUFF = 0
   TIBUFF = 0
-
-  FACTOR = maxval((/epsx,epsy,epsz/),dim=1)
   
 !!DETERMINE THE OCCUPANCY OF EACH SITE
 
@@ -99,7 +99,7 @@ subroutine WignerSeitzAnalysis
   do I = IDLO, IDHI
     if (features%grains%grainOccupy(I) == 0) cycle
     RS = 0; RMIN = HUGE(RMIN); MIN = 0
-    call RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I), 2.0D0*FACTOR)
+    call RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I), 2.0D0)
     if (RFGRID%singleListCount == 0) print *, RA(1, I), RA(2, I), RA(3, I)
     do J = 1, RFGRID%singleListCount
       RID = RFGRID%singleNeighList(j)
@@ -224,9 +224,9 @@ subroutine OVITO
   write (29, '(A)') 'ITEM: NUMBER OF ATOMS'
   write (29, *) NDVAC + NDINT
   write (29, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
-  write (29, '(2F10.4,I5)') 0.00, RBOX*EPSX, 3
-  write (29, '(2F10.4,I5)') 0.00, RBOX*EPSY, 3
-  write (29, '(2F10.4,I5)') 0.00, RBOX*EPSZ, 3
+  write (29, '(2F10.4,I5)') 0.00, BOXX, 3
+  write (29, '(2F10.4,I5)') 0.00, BOXY, 3
+  write (29, '(2F10.4,I5)') 0.00, BOXZ, 3
   write (29, '(A)') 'ITEM: ATOMS x y z type'
 
   do I = 1, NATOMC
@@ -262,9 +262,9 @@ subroutine OVITO
   write (30, '(A)') 'ITEM: NUMBER OF ATOMS'
   write (30, *) NATOMC
   write (30, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
-  write (30, '(2F15.8,I1)') 0.00, RBOX*EPSX, 3
-  write (30, '(2F15.8,I1)') 0.00, RBOX*EPSY, 3
-  write (30, '(2F15.8,I1)') 0.00, RBOX*EPSZ, 3
+  write (30, '(2F15.8,I1)') 0.00, BOXX, 3
+  write (30, '(2F15.8,I1)') 0.00, BOXY, 3
+  write (30, '(2F15.8,I1)') 0.00, BOXZ, 3
   write (30, '(A)') 'ITEM: ATOMS x y z grain'
 
   do I = 1, NATOMC
@@ -406,7 +406,7 @@ subroutine grainAssignmentFix(OLDPOS, OLDC)
 
   OGA = features%grains%grainOccupy
 
-  CALL BG%initBinGrid(30, 30, 30, RBOX*EPSX, RBOX*EPSY, RBOX*EPSZ)
+  CALL BG%initBinGrid(30, 30, 30, BOXX, BOXY, BOXZ)
   CALL BG%assignAtomsToBins(OLDPOS, OLDC)
 
   do I=1,NATOMC
@@ -427,7 +427,7 @@ end subroutine grainAssignmentFix
 !***********************************************************************!
 subroutine FRENKEL_POS_UPDATE(POS, THRESH)
 
-  USE SYSTEM, ONLY: RA, NATOMC, RBOX, EPSX, EPSY, EPSZ
+  USE SYSTEM, ONLY: RA, NATOMC, BOXX, BOXY, BOXZ
 
   implicit none
 
@@ -440,11 +440,11 @@ subroutine FRENKEL_POS_UPDATE(POS, THRESH)
 
   ID_NEAR = 0; RS_NEAR = HUGE(RS_NEAR); FLAG = .TRUE.
 
-  CALL RANdoM_NUMBER(POS)
+  call random_number(POS)
 
-  POS(1) = POS(1)*RBOX*EPSX
-  POS(2) = POS(2)*RBOX*EPSY
-  POS(3) = POS(3)*RBOX*EPSZ
+  POS(1) = POS(1)*BOXX
+  POS(2) = POS(2)*BOXY
+  POS(3) = POS(3)*BOXZ
 
       !!FIND closeST ATOM TO (X,Y,Z)
 
@@ -470,7 +470,7 @@ subroutine FRENKEL_POS_UPDATE(POS, THRESH)
 
       !!! UPDATE THE POSITION UNTIL IT IS SUITABLE FOR RELAXATION
 
-  do WHILE (FLAG)
+  do while (FLAG)
 
     FLAG = .FALSE.
 
@@ -563,7 +563,7 @@ subroutine RESTART
       write(27, *)
 
       write(27, *) &
-        'ISTEP, TIME, TIME_LAST, DTIME, DPA, DPAC, AVDPA, ONDSTOT, EPSX, EPSY, EPSZ'
+        'ISTEP, TIME, TIME_LAST, DTIME, DPA, DPAC, AVDPA, ONDSTOT'
       write(27, *) ISTEP
       write(27, *) TIME
       write(27, *) TIME_LAST
@@ -572,9 +572,6 @@ subroutine RESTART
       write(27, *) DPAC
       write(27, *) AVDPA
       write(27, *) ONDSTOT
-      write(27, *) EPSX
-      write(27, *) EPSY
-      write(27, *) EPSZ
       write(27, *)
 
       !Write defect migration energies
