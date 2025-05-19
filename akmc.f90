@@ -2,7 +2,6 @@ SUBROUTINE OPLD
 
   use system
   use lmp_driver
-  use MicroStrucFeatures
 
   IMPLICIT NONE
 
@@ -10,9 +9,6 @@ SUBROUTINE OPLD
     call lmpSystem%relaxSystemPressure()
     call lmpSystem%getPositions()
     call lmpDimer%changeBoxDimensions(boxx, boxy, boxz)
-    call features%grains%init(lmpSystem, MGSZ)
-    call features%grains%identifyGrains()
-    call features%reflat%createRefLattice(features%grains)
   end if
 
   do ISTEP = (BSTEP + 1), (NTSTEP + BSTEP)
@@ -44,7 +40,7 @@ subroutine SPS
 
   use CLASS_DIMER
   use LMP_DRIVER
-  use MicroStrucFeatures
+  use Clusters
 
   implicit none
 
@@ -58,11 +54,11 @@ subroutine SPS
   ND = 0.0D0; if (RANK .EQ. 0) NDBUFF = 0.0D0
   SR_LEN = SIZE(SR)
 
-  call features%defects%syncClusterData(lmpSystem%getCommunicator())
-  x = features%defects%selectedCluster%comx
-  y = features%defects%selectedCluster%comy
-  z = features%defects%selectedCluster%comz
-  r = features%defects%selectedCluster%radiusAV
+  call defects%syncClusterData(lmpSystem%getCommunicator())
+  x = defects%selectedCluster%comx
+  y = defects%selectedCluster%comy
+  z = defects%selectedCluster%comz
+  r = defects%selectedCluster%radiusAV
 
   !CARRY OUT SADDLE POINT SEARCHING
   do J = LDIMERI, UDIMERI
@@ -175,7 +171,7 @@ end SUBROUTINE OPT
 SUBROUTINE DCIDNT
   use SYSTEM
   use DEFECT
-  use MicroStrucFeatures
+  use Clusters
 
   implicit none
 
@@ -241,20 +237,20 @@ SUBROUTINE DCIDNT
     PX(7, NDTOT) = IV(1, j)
   end do
   
-  call features%defects%identifyClusters(PX, NDTOT, 1.2D0)
+  call defects%identifyClusters(PX, NDTOT, 1.2D0)
 
-  NDTOT = features%defects%numClusters
+  NDTOT = defects%numClusters
 
   !Put the clusters data in the PX array
   !TODO remove dependancy of PX array
   do i = 1, NDTOT
 
-    px(1,i) = features%defects%clusters(i)%comx
-    px(2,i) = features%defects%clusters(i)%comy
-    px(3,i) = features%defects%clusters(i)%comz
-    px(4,i) = features%defects%clusters(i)%radiusAV
+    px(1,i) = defects%clusters(i)%comx
+    px(2,i) = defects%clusters(i)%comy
+    px(3,i) = defects%clusters(i)%comz
+    px(4,i) = defects%clusters(i)%radiusAV
     px(5,i) = 1.0D0
-    px(6,i) = features%defects%clusters(i)%type
+    px(6,i) = defects%clusters(i)%type
     px(7,i) = 0
   end do
 
@@ -269,7 +265,7 @@ SUBROUTINE DCIDNT
 
   if (mod(ISTEP, NFREQ) .eq. 0) then
     call DEFECT_PRINT(PX, NDTOT)
-    call features%defects%printBannedCount()
+    call defects%printBannedCount()
     call flush(6)
   end if
 
@@ -296,7 +292,7 @@ SUBROUTINE DFSEL
   USE SYSTEM
   USE DEFECT
   USE KMCVAR
-  use MicroStrucFeatures
+  use Clusters
 
   IMPLICIT NONE
 
@@ -310,15 +306,15 @@ SUBROUTINE DFSEL
 
   speed = 0.0d0
   jmapsz = 1000
-  numClusters = features%defects%numClusters
+  numClusters = defects%numClusters
 
   allocate (pj(1:2, 1:ndtot))
 
   do i = 1, numClusters
 
-    if (features%defects%clusters(i)%isBanned()) cycle
+    if (defects%clusters(i)%isBanned()) cycle
 
-    clusterType = features%defects%clusters(i)%type
+    clusterType = defects%clusters(i)%type
     j = abs(clusterType)
 
     if (clusterType .lt. 0) then
@@ -347,9 +343,9 @@ SUBROUTINE DFSEL
 
   do i = 1, ndtot
 
-    if (features%defects%clusters(i)%isBanned()) cycle
+    if (defects%clusters(i)%isBanned()) cycle
 
-    clusterType = features%defects%clusters(i)%type
+    clusterType = defects%clusters(i)%type
 
     if (clusterType .lt. 0) then
       k = 1 !vacancy type
@@ -361,15 +357,15 @@ SUBROUTINE DFSEL
     if (sump .ge. prop) exit
   end do
 
-  call features%defects%saveClusterSelection(features%defects%clusters(i))
+  call defects%saveClusterSelection(defects%clusters(i))
 
   OBFQSUM = SPEED - pj(k, i) !rate sum of all other non chosen clusters
 
-  x = features%defects%selectedCluster%comx
-  y = features%defects%selectedCluster%comy
-  z = features%defects%selectedCluster%comz
-  r = features%defects%selectedCluster%radiusAV
-  clusterType = features%defects%selectedCluster%type
+  x = defects%selectedCluster%comx
+  y = defects%selectedCluster%comy
+  z = defects%selectedCluster%comz
+  r = defects%selectedCluster%radiusAV
+  clusterType = defects%selectedCluster%type
 
   if (mod(ISTEP, NFREQ) .eq. 0) then
     write (*, '(15X,5(A10,X))') 'X', 'Y', 'Z', 'RADIUS', 'TYPE'
@@ -388,7 +384,7 @@ SUBROUTINE KMC
   use DEFECT
   use MPI
   use LMP_DRIVER
-  use MicroStrucFeatures
+  use Clusters
 
   implicit none
 
@@ -444,10 +440,10 @@ SUBROUTINE KMC
     EID = K
 
     !UPDATING THE PRE-SELECTION ENERGIES
-    x = features%defects%selectedCluster%comx
-    y = features%defects%selectedCluster%comy
-    z = features%defects%selectedCluster%comz
-    type = features%defects%selectedCluster%type
+    x = defects%selectedCluster%comx
+    y = defects%selectedCluster%comy
+    z = defects%selectedCluster%comz
+    type = defects%selectedCluster%type
     if (type .lt. 0) then
       K = 1
     else
@@ -487,7 +483,7 @@ SUBROUTINE KMC
   call MPI_BCAST(ban, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), ierr)
 
   if (ban) then
-    call features%defects%banCluster(features%defects%selectedCluster)
+    call defects%banCluster(defects%selectedCluster)
     if (rank == 0) write(*,'(A,3F14.5)') 'Banned defect at: ', x, y, z
   end if
 
@@ -504,7 +500,7 @@ SUBROUTINE DOSE
 
   USE SYSTEM
   USE LMP_DRIVER
-  use MicroStrucFeatures
+  use Clusters
 
   IMPLICIT NONE
 
@@ -531,7 +527,7 @@ SUBROUTINE DOSE
 
     if (RANK == 0) CALC = .TRUE.
 
-    call features%defects%clearBannedList()
+    call defects%clearBannedList()
 
   end if
 

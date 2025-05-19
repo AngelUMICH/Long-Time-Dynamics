@@ -1,17 +1,40 @@
 subroutine readInput
 
   use SYSTEM
+  use MPI
+
+  integer :: ios
+  logical :: exists
+
+  inquire (file='par_init.dat', exist=exists)
+  if (.not. exists) then
+    if (rank == 0) then
+      write (*, '(A)') '***********************************************'
+      write (*, '(A)') 'Please provide a parameter file in par_init.dat'
+      write (*, '(A)') '***********************************************'
+    end if
+    call MPI_FINALIZE(ierr)
+    stop
+  end if
 
   !!PARAMETER INPUT FILE,MASTER CONTROL FILE
   open (UNIT=10, FILE='par_init.dat')
 
   !!readING SYSTEM PARAMTER, SEE PAR_INIT.DAT FOR DETAILS
-  read (10, '( 11(I10/),4(F10.3/),2(I10/),8(F14.6/),(I10/),(ES15.5/),(L/),2(F10.6/),(F10.6) )') &
-    REST, TDAM, TPBC, TCRY, NTSTEP, NFREQ, NDEMAX, NAVMAX, NDIMER, TLAT, MGSZ, &
+  read (10, '( 10(I10/),4(F10.3/),2(I10/),8(F14.6/),(I10/),(ES15.5/),(L/),2(F10.6/),(F10.6) )', IOSTAT=ios) &
+    REST, TDAM, TPBC, TCRY, NTSTEP, NFREQ, NDEMAX, NAVMAX, NDIMER, TLAT, &
     RLAT, PCUTR, DCUTR, DECUT, NDSMAX, NDRMAX, RDIMER, FNRMAX, FNRMIN, DSTEPF, &
     DSTEPM, TEMP, PKAE, DRATE, NFREKL, TIME, SIGRELON, SIGX, SIGY, SIGZ
-
+    
   close (10)
+  
+  if (ios /= 0) then
+    if (rank == 0) then
+      write (*, '(A)') 'Error reading parameter file!'
+    end if
+    call MPI_FINALIZE(ierr)
+    stop
+  end if
 
 end subroutine readInput
 !***********************************************************************!
@@ -151,8 +174,6 @@ subroutine sysInit
 
   NATOMR = NATOMC
 
-  call readRestartParameters()
-
   allocate(FQ(NDIMER)); FQ = 0.0D0
   allocate(EM(NDIMER)); EM = 0.0D0
   allocate(OE(NDIMER)); OE = 0.0D0
@@ -180,6 +201,9 @@ subroutine sysInit
   allocate(NDBUFF(NDIMER)); NDBUFF = 0
   allocate(EMBUFF(NDIMER)); EMBUFF = 0.0D0
 
+  allocate(EMIG(2, 50)); EMIG = 0.0D0
+  allocate(EMIC(2, 50)); EMIC = 1
+
   !!VARIABLES ASSOCIATED WITH DIMER
 
   RDIMER = RDIMER/RLAT
@@ -190,54 +214,96 @@ subroutine sysInit
 
   SKIP = .FALSE.
 
-  ! Read defect energies only if not in restart mode 
+  !Read the reference lattice
+  call readRefLattice
+
+  ! Read the paratemers based on restart mode
   if (REST .eq. 1) then
-    if (.not. allocated(EMIG)) allocate(EMIG(2, 50)); EMIG = 0
-    if (.not. allocated(EMIC)) allocate(EMIC(2, 50)); EMIC = 1
-
-    inquire (FILE='emig.dat', EXIST=EXISTS)
-    if (.NOT. EXISTS) THEN
-      write (*, *) "File 'emig.dat' cannot be found"
-      stop
-    end if
-
-    open (UNIT=11, FILE='emig.dat')
-
-    !Read vacancy mig. energies
-    read (11, *)
-    read (11, *) NEMIG
-
-    do I = 1, NEMIG
-      read (11, *) EMIG(1, I)
-    end do
-    do I = NEMIG + 1, 50
-      EMIG(1, I) = 3.5
-    end do
-
-    !Read interstitial mig. energies
-    read (11, *)
-    read (11, *) NEMIG
-
-    do I = 1, NEMIG
-      read (11, *) EMIG(2, I)
-    end do
-    do I = NEMIG + 1, 50
-      EMIG(2, I) = 3.0
-    end do
-
-    close (11)
+    call readDefaultParameters()
+  else if (REST .eq. 2) then
+    call readRestartParameters()
   end if
 
   RETURN
 
 end subroutine sysInit
 !***********************************************************************!
+subroutine readRefLattice
+
+  use mpi
+  use system
+  use LMP_Driver
+
+  logical :: exists
+
+  inquire (file='pos_ref.dat', exist=exists)
+  call MPI_BCAST(exists, 1, MPI_logical, 0, lmpSystem%getCommunicator(), ierr)
+  if (.not. exists) then
+    if (rank == 0) then
+      write (*, '(A)') '***********************************************'
+      write (*, '(A)') 'Please provide a reference file in pos_ref.dat.'
+      write (*, '(A)') '***********************************************'
+    end if
+    call MPI_FINALIZE(ierr)
+    stop
+  end if
+
+  ! Continues here if pos_ref.dat is found
+  open(unit=21, file='pos_ref.dat')
+  read(21, *) NATOMR
+  if (.not. allocated(RR)) allocate(RR(3,NATOMR))
+  do i= 1, natomr
+    read(21, *) (RR(j,i), j=1,3)
+  end do
+  close(21)
+
+end subroutine readRefLattice
+!***********************************************************************!
+subroutine readDefaultParameters
+
+  use SYSTEM
+
+  logical :: exists
+
+  inquire (FILE='emig.dat', EXIST=EXISTS)
+  if (.NOT. EXISTS) THEN
+    write (*, *) "File 'emig.dat' cannot be found"
+    stop
+  end if
+
+  open (UNIT=11, FILE='emig.dat')
+
+  !Read vacancy mig. energies
+  read (11, *)
+  read (11, *) NEMIG
+
+  do I = 1, NEMIG
+    read (11, *) EMIG(1, I)
+  end do
+  do I = NEMIG + 1, 50
+    EMIG(1, I) = 3.5
+  end do
+
+  !Read interstitial mig. energies
+  read (11, *)
+  read (11, *) NEMIG
+
+  do I = 1, NEMIG
+    read (11, *) EMIG(2, I)
+  end do
+  do I = NEMIG + 1, 50
+    EMIG(2, I) = 3.0
+  end do
+
+  close (11)
+  
+end subroutine readDefaultParameters
+!***********************************************************************!
 subroutine readRestartParameters
 
   use SYSTEM
   use DEFECT
   use LMP_DRIVER
-  use MicroStrucFeatures
 
   implicit none
 
@@ -271,8 +337,6 @@ subroutine readRestartParameters
     read(27, *)
 
     !Read defect migration energies
-    if (.not. allocated(EMIG)) allocate(EMIG(2, 50))
-    if (.not. allocated(EMIC)) allocate(EMIC(2, 50))
     
     read (27, *) !skip header
     do i = 1, 50
@@ -286,28 +350,8 @@ subroutine readRestartParameters
       read (27, *) EMIG(2, I), EMIC(2, I)
     end do
     read (27, *)
-    
-    !Read grain assignments
-    read (27, *) !skip header
-    read (27, *) NATOMC
-    call features%grains%allocateClusterArray(NATOMC)
-    do i = 1, NATOMC
-
-      read (27, *) features%grains%grainOccupy(I)
-    end do
 
     close (27)
-
-    !Read the reference lattice
-    open(unit=21, file='pos_ref.dat')
-    read(21, *) natomr
-    read(21, *)
-    if (.not. allocated(RR)) allocate(RR(3,NATOMR))
-    do i= 1, natomr
-
-      read(21, *) (RR(j,i), j=1,3)
-    end do
-    close(21)
 
     call lmpSystem%getPositions()
 

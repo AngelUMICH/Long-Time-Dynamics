@@ -1,0 +1,14 @@
+6
+lattice bcc 2.8553
+region box block 0 30.0 0 30.0 0 30.0 units lattice
+create_box 1 box
+create_atoms 1 box
+mass 1 56.0
+minimize 1e-10 1e-10 1000 10000
+
+4
+pair_style eam/fs
+pair_coeff * * FeP_mm.eam.fs Fe
+neighbor 2 bin
+neigh_modify every 1000 delay 10000 check no
+

@@ -66,7 +66,7 @@ subroutine WignerSeitzAnalysis
   USE DEFECT
   USE MPI
   USE LMP_DRIVER
-  use MicroStrucFeatures
+  use Clusters
 
   implicit none
 
@@ -75,7 +75,7 @@ subroutine WignerSeitzAnalysis
   INTEGER IDHI, IDLO, RID
   INTEGER OCCBUFF(SIZE(OCC))
 
-  call features%defects%init(NDEMAX)
+  call defects%init(NDEMAX)
 
   IDLO = NATOMC/NPROCS*(RANK) + 1
   IDHI = NATOMC/NPROCS*(RANK + 1)
@@ -97,7 +97,6 @@ subroutine WignerSeitzAnalysis
 !$OMP PARALLEL PRIVATE(RS,RX,RY,RZ,RMIN,RID,MIN,J,N,ATOM) SHARED(OC,OCC)
 !$OMP do
   do I = IDLO, IDHI
-    if (features%grains%grainOccupy(I) == 0) cycle
     RS = 0; RMIN = HUGE(RMIN); MIN = 0
     call RFGRID%getNearestNeighbors(RA(1, I), RA(2, I), RA(3, I), 2.0D0)
     if (RFGRID%singleListCount == 0) print *, RA(1, I), RA(2, I), RA(3, I)
@@ -141,13 +140,6 @@ subroutine WignerSeitzAnalysis
   end do
 !$OMP end do
 !$OMP end PARALLEL
-
-  ! Remove the grain boundary ints from defect list
-  do i = IDLO, IDHI
-    if (features%grains%grainOccupy(i) == 0)then
-      TI(i) = 1
-    end if
-  end do
 
   CALL MPI_REDUCE(TV, TVBUFF, SIZE(TV), MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
   CALL MPI_REDUCE(TI, TIBUFF, SIZE(TI), MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
@@ -204,8 +196,6 @@ subroutine OVITO
   USE SYSTEM
 
   USE DEFECT
-
-  USE MicroStrucFeatures, only: features
 
   implicit none
 
@@ -265,10 +255,10 @@ subroutine OVITO
   write (30, '(2F15.8,I1)') 0.00, BOXX, 3
   write (30, '(2F15.8,I1)') 0.00, BOXY, 3
   write (30, '(2F15.8,I1)') 0.00, BOXZ, 3
-  write (30, '(A)') 'ITEM: ATOMS x y z grain'
+  write (30, '(A)') 'ITEM: ATOMS x y z'
 
   do I = 1, NATOMC
-    write (30, '(3F14.5,1I14)') RA(1, I),RA(2, I),RA(3, I),features%grains%grainOccupy(i)
+    write (30, '(3F14.5)') RA(1, I),RA(2, I),RA(3, I)
   end do
 
   close (30)
@@ -278,7 +268,6 @@ end subroutine OVITO
 subroutine BASIC_DAMAGE(NFRKL)
 
   USE SYSTEM, ONLY: RA, NATOMC, RANK, DECUT, TDAM
-  USE MicroStrucFeatures
 
   implicit none
 
@@ -311,10 +300,9 @@ subroutine BASIC_DAMAGE(NFRKL)
       if (ID .EQ. 0) ID = 1
 
       ! Do not insert chosen atom if it already is in the list
-      ! or if it grain boundary atom
       INSERT = .TRUE.
       do J = 1, N - 1
-        if (ID .EQ. MOVEID(J) .or. features%grains%grainOccupy(ID) == 0) INSERT = .FALSE.
+        if (ID .EQ. MOVEID(J)) INSERT = .FALSE.
       end do
       if (INSERT) then
         MOVEID(N) = ID
@@ -357,7 +345,6 @@ subroutine CREATE_VACANCIES(NFRKL, IDS)
   USE SYSTEM
   USE LMP_DRIVER
   USE MPI
-  use MicroStrucFeatures
 
   implicit none
 
@@ -384,46 +371,7 @@ subroutine CREATE_VACANCIES(NFRKL, IDS)
   NATOMC = int(lammps_get_natoms(lmpSystem%getLammpsPtr()))
   call lmpSystem%getPositions
 
-  !Fix grain assignment since ordering got messed up
-  call grainAssignmentFix(ORA,ONATOMC)
-
 end subroutine CREATE_VACANCIES
-!***********************************************************************!
-subroutine grainAssignmentFix(OLDPOS, OLDC)
-
-  USE SYSTEM
-  USE MicroStrucFeatures
-  USE BINS
-
-  implicit none
-
-  INTEGER, INTENT(IN) :: OLDC
-  REAL*8, DIMENSION(3,OLDC), INTENT(IN) :: OLDPOS
-
-  INTEGER :: I,J,K
-  INTEGER, DIMENSION(OLDC) :: OGA ! OLD GRAIN ASSIGNMENTS
-  TYPE(BinGrid) :: BG
-
-  OGA = features%grains%grainOccupy
-
-  CALL BG%initBinGrid(30, 30, 30, BOXX, BOXY, BOXZ)
-  CALL BG%assignAtomsToBins(OLDPOS, OLDC)
-
-  do I=1,NATOMC
-
-    CALL BG%getNearestNeighbors(RA(1,I),RA(2,I),RA(3,I),1.0D0)
-    do J = 1, BG%singleListCount
-      K = BG%singleNeighList(J)
-      if (norm2(RA(:,I)-OLDPOS(:,K)) < 0.01) then
-        features%grains%grainOccupy(i) = OGA(k)
-        if (OGA(k) > 3 .and. rank == 0) print *, OGA(k), k
-        exit
-      end if
-    end do
-
-  end do
-
-end subroutine grainAssignmentFix
 !***********************************************************************!
 subroutine FRENKEL_POS_UPDATE(POS, THRESH)
 
@@ -539,8 +487,6 @@ subroutine RESTART
   use system
   use defect
   use lmp_driver
-  use MicroStrucFeatures
-
 
   implicit none
 
@@ -585,15 +531,6 @@ subroutine RESTART
       do i = 1, 50
 
         write (27, *) EMIG(2, I), EMIC(2, I)
-      end do
-      write(27, *)
-
-      !Write atom grain assignments
-      write(27, *) 'Grain Assignments'
-      write(27, *) NATOMC
-      do i = 1, natomc
-
-        write(27, '(I0)') features%grains%grainOccupy(I)
       end do
 
       close (27)
