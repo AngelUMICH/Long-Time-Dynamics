@@ -2,12 +2,13 @@
 3                 # SIGY          [ --  ] I  Damage mode 2:Frenkel, 3:Vacancy
 1                 # TPBC          [ --  ] I  Boundary Condition: 1:PBC 2:Absorbing
 2                 # TCRY          [ --  ] I  Material Crystallinity: 1:Single 2:Poly
-1              # NTSTEP        [ --  ] I  Total Number of Step
+1                 # NTSTEP        [ --  ] I  Total Number of Step
 1                 # NFREQ         [ --  ] I  Output Frequency
 10000             # NDEMAX        [ --  ] I  Maximum Number of Defect
 20000             # NAVMAX        [ --  ] I  Maximum Number of Atoms in the AVs
 12                # NDIMER        [ --  ] I  Number of dimer searches per iteration 
-1                 # TLAT          [ --  ] I  Crystal Type 1: BCC 2: FCC
+0.3               # VACLIM        [ eV  ] R  Vacancy Energy Barrier Threshold
+0.005              # INTLIM        [ eV  ] R  Interstitial Energy Barrier Threshold
 2.8553            # RLAT          [ A   ] R  Lattice Constant
 5.3               # PCUTR         [ A   ] R  Cutoff for the pair    term of potential
 4.21       	      # DCUTR     	  [ A   ] R  Cutoff for the density term of potential
@@ -22,7 +23,7 @@
 500.0             # TEMP          [ k   ] R  Temperature
 0.0               # PKAE          [ ev  ] R  PKA Energy (Ion Mode only)
 0.001             # DRATE         [dpa/s] R  Irradiation Dose Rate
-1                # NFREKL        [ dpa ] I  Number of Defects to Create (Non-cascade Mode Only)
+135                # NFREKL        [ dpa ] I  Number of Defects to Create (Non-cascade Mode Only)
 0.000E+00         # TIME          [ s   ] R  Time
 true              # SIGRELON      [ b   ] L  Switch for Stress Box Relaxation at First Step
 0.0               # SIGY          [ bar ] R  Stress in the X direction

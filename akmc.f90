@@ -1,4 +1,4 @@
-SUBROUTINE OPLD
+SUBROUTINE drld
 
   use system
   use lmp_driver
@@ -29,7 +29,7 @@ SUBROUTINE OPLD
 
   end do
 
-end SUBROUTINE
+end SUBROUTINE drld
 !***********************************************************************!
 subroutine SPS
 
@@ -49,9 +49,9 @@ subroutine SPS
   integer :: J, K, SR_LEN
   real*8 :: x,y,z,r
 
-  SR = 0.0D0; if (RANK .EQ. 0) SRBUFF = 0.0D0
-  EM = 0.0D0; if (RANK .EQ. 0) EMBUFF = 0.0D0
-  ND = 0.0D0; if (RANK .EQ. 0) NDBUFF = 0.0D0
+  SR = 0.0D0; SRBUFF = 0.0D0
+  EM = 0.0D0; EMBUFF = 0.0D0
+  ND = 0.0D0; NDBUFF = 0.0D0
   SR_LEN = SIZE(SR)
 
   call defects%syncClusterData(lmpSystem%getCommunicator())
@@ -87,18 +87,15 @@ subroutine SPS
     call DIMER_FINISH(ADIMER)
   end do
 
-  !Gather data on main rank
-  call MPI_REDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
-  call MPI_REDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
-  call MPI_REDUCE(ND, NDBUFF, NDIMER, MPI_INT, MPI_SUM, 0, lmpSystem%getCommunicator(), IERR)
+  call MPI_ALLREDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, lmpSystem%getCommunicator(), IERR)
+  call MPI_ALLREDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, lmpSystem%getCommunicator(), IERR)
+  call MPI_ALLREDUCE(ND, NDBUFF, NDIMER, MPI_INT,   MPI_SUM, lmpSystem%getCommunicator(), IERR)
 
-  if (rank .eq. 0) then
-    SR = SRBUFF
-    EM = EMBUFF
-    ND = NDBUFF
-  end if
+  SR = SRBUFF
+  EM = EMBUFF
+  ND = NDBUFF
 
-end subroutine
+end subroutine SPS
 !***********************************************************************!
 SUBROUTINE OPT
 
@@ -189,7 +186,7 @@ SUBROUTINE DCIDNT
   II = 0
   IV = 0
 
-!IDENTIFY INTERSTITIAL,PI:POSITION OF INTERSITITAL
+  !IDENTIFY INTERSTITIAL,PI:POSITION OF INTERSITITAL
 
   do i = 1, NATOMC
 
@@ -202,7 +199,7 @@ SUBROUTINE DCIDNT
     end if
   end do
 
-!IDENTIFY VACANCY,PV:POSITION OF VACANCY
+  !IDENTIFY VACANCY,PV:POSITION OF VACANCY
 
   do j = 1, NATOMR
 
@@ -385,79 +382,78 @@ SUBROUTINE KMC
   use MPI
   use LMP_DRIVER
   use Clusters
+  use Basin
 
   implicit none
 
   integer :: I, K, jmapsz, type
 
-  real*8 RND, dt, scalef, prop, TOTFQSUM, x, y, z
+  real*8 :: RND, dt, scalef, prop, TOTFQSUM, EXITFQSUM
+  real*8 :: x, y, z
 
-  logical ban
+  logical :: ban
 
   character(LEN=40) str
 
   if (rank .eq. 0) then
 
-!FQSUM:SUM OF FREQUENCY,POSUM:SUM OF PROBABILITIES(FOR CHECK ONLY)
-    FQSUM = 0.0D0
-    TOTFQSUM = 0.0D0
-    POSUM = 0.0D0
+    FQSUM = 0.0D0 ! frequency sum of current transition states
+    TOTFQSUM = 0.0D0 ! approximate frequency sum of entire system
+    EXITFQSUM = 0.0D0 ! frequency sum of exit events after mean rate
+    POSUM = 0.0D0 ! probability sum
     jmapsz = 1000
-
-!CALCULATE FREQUENCY BASED ON THE MIGRATION ENERGY BARRIER
-!THE PREFACTOR HERE IS USED TO BE CONSTANT (NOT TRUE IN GENERAL)
-!THE PREFACTOR CALCUATED ON THE FLY IS IMPLEMENTED IN ANOTHER VERSION
-! Now considering good dimer search - Gao 2021
-
-    do K = 1, NDIMER
-
-      if (EM(k) .lt. 10) then
-        FQ(K) = 1.0D12*EXP(-EM(K)/KB/TEMP)
-        FQSUM = FQSUM + FQ(K)
-      end if
-    end do
-
-    call RANDOM_NUMBER(RND)
-    prop = rnd*float(jmapsz)
-
-    !DETERMINE TIME STEP IN KMC
-    if (FQSUM .gt. 0.0) then
-      TMEAN = -LOG(RND)/(FQSUM+OBFQSUM) !With time correction using other objects FQs
-      dt = 1.0/fqsum
-      scalef = dt*dfloat(jmapsz)
-    end if
-
-    do K = 1, NDIMER
-
-      if (EM(k) .lt. 10.0) then
-        POSUM = POSUM + FQ(K)*scalef
-      end if
-      if (POSUM .ge. prop) exit
-    end do
-
-    !EID:THE ID OF THE EVENT THAT IS CHOSEN
-
-    EID = K
-
-    !UPDATING THE PRE-SELECTION ENERGIES
+    
     x = defects%selectedCluster%comx
     y = defects%selectedCluster%comy
     z = defects%selectedCluster%comz
     type = defects%selectedCluster%type
-    if (type .lt. 0) then
-      K = 1
-    else
-      K = 2
+
+    !CALCULATE FREQUENCY BASED ON THE MIGRATION ENERGY BARRIER
+    !THE PREFACTOR HERE IS USED TO BE CONSTANT (NOT TRUE IN GENERAL)
+    !THE PREFACTOR CALCUATED ON THE FLY IS IMPLEMENTED IN ANOTHER VERSION
+    ! Now considering good dimer search - Gao 2021
+
+    do K = 1, NDIMER
+      if (EM(k) < 10.0) then
+        FQ(K) = 1.0D12*EXP(-EM(K)/KB/TEMP)
+        FQSUM = FQSUM + FQ(K)
+        ! For a single basin state the following is true.
+        ! When consider more basin states mean time per escape
+        ! must be considered.
+        if (EM(K) >= merge(VACLIM,INTLIM,type<0)) then
+          EXITFQSUM = EXITFQSUM + FQ(K)*1
+        end if
+      end if
+    end do
+
+    ! Determine mean time in KMC step
+    call RANDOM_NUMBER(RND)
+    if (FQSUM > 0.0) then
+      TOTFQSUM = FQSUM+OBFQSUM
+      TMEAN = -LOG(RND)/(TOTFQSUM)
+      dt = 1.0/EXITFQSUM
+      scalef = dt*dfloat(jmapsz)
     end if
 
-    !CHECKING FOR TOO HIGH TRANSITION ENERGY
+    ! Randomly choosing event based on probability
+    prop = rnd*float(jmapsz)
+    do K = 1, NDIMER
+      ! Only consider absorbing events (i.e above limit)
+      if (EM(k) < 10.0 .and. EM(K) >= merge(VACLIM,INTLIM,type<0)) then
+        POSUM = POSUM + FQ(K)*scalef
+      end if
+      if (POSUM >= prop) exit
+    end do
 
-    if (EM(EID) .LE. EMSKIP .AND. EID .LE. NDIMER) THEN
+    ! Saving dimer ID of chosen event
+    EID = K
+    
+    ! Updating time and pre-selection rates or skipping KMC step
+    if (EM(EID) <= EMSKIP .AND. EID <= NDIMER) THEN
       TIME = TIME + TMEAN
-
-      !ONLY POSITIVE SADDLE POINT ENERGIES WILL BE USED IN AVERAGE
-      if (EM(EID) .GT. 0) THEN
+      if (EM(EID) > 0) THEN
         I = abs(type)
+        K = merge(1, 2, type < 0)
         EMIG(K, I) = (EMIG(K, I)*EMIC(K, I) + EM(EID))/(EMIC(K, I) + 1)
         EMIC(K, I) = EMIC(K, I) + 1
       end if
@@ -465,11 +461,13 @@ SUBROUTINE KMC
       SKIP = .TRUE.
       write (STR, '(F8.5)') EMSKIP
       write (6, *) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)// &
-        'eV -> SKIPPING'
+                   'eV -> SKIPPING'
     end if
 
-    if (MOD(ISTEP, NFREQ) .EQ. 0) THEN
+    ! Print stats of KMC selection
+    if (MOD(ISTEP, NFREQ) == 0) THEN
       write (6, '(A,I10,A,F10.4)') 'EID: ', EID, '  RND: ', RND
+      write (6, '(A,F12.9)') 'Exiting Basin Prob. : ', EXITFQSUM/FQSUM
     end if
 
   end if

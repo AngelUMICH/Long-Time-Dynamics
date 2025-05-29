@@ -332,7 +332,7 @@ subroutine BASIC_DAMAGE(NFRKL)
 
   ELSE if (TDAM .EQ. 3) then
 
-    if (RANK .EQ. 0) write (*, '(A,I0,A)') 'Generating ', NFRKL, ' single vacancies'
+    if (RANK .EQ. 0) write (*, '(A,I0,A)') 'Generating ', NFRKL, ' vacancies'
 
     CALL CREATE_VACANCIES(NFRKL, MOVEID)
 

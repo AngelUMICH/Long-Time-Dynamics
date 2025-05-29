@@ -15,7 +15,7 @@ program main
   call lmpInit
   call sysInput
   call sysInit
-  call opld
+  call drld
 
   call MPI_FINALIZE(IERR)
 
