@@ -1,13 +1,15 @@
 #Change LMPLIB with directory with LAMMPS static library
 LMPSRC = /home/achavira/software/lammps/src/
 LMPLIB = /home/achavira/software/lammps/build/liblammps_linux.a
+LMPSRC = /home/achavira/software/lammps/src/
+LMPLIB = /home/achavira/software/lammps/build/liblammps_linux.a
 LMPCWRAP = LAMMPS-wrapper.o
 LMPFLIB = LAMMPS.o
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always --tags)
 
 BUILD_DIR = Obj_files
-OBJS_names = LAMMPS.o LAMMPS-wrapper.o version.o bins.o define.o lmp.o queue.o clusters.o init.o funct.o dimer.o main.o akmc.o
+OBJS_names = similar.o kind.o linear_solve.o LAMMPS.o LAMMPS-wrapper.o version.o bins.o define.o event.o basin.o network.o lmp.o queue.o clusters.o init.o funct.o dimer.o main.o akmc.o
 OBJS = $(OBJS_names:%=$(BUILD_DIR)/%)
 FLAGS = -O3 -g -fopenmp -std=legacy -ffree-form -I$(BUILD_DIR) #-fcheck=all
 LIBS = -lgomp -lstdc++ -lm -ldl -lmpi -lmpi_cxx
@@ -17,7 +19,7 @@ TARGET = opld
 # Rule to build executable
 $(TARGET): $(OBJS)
 	mpifort $(FLAGS) -o  $@  $^ $(LMPLIB) $(LIBS)
-	mv *.mod $(BUILD_DIR)
+	mv *.mod $(BUILD_DIR) 2>/dev/null || true
 	
 # Rule to build LAMMPS interfaces object file
 $(BUILD_DIR)/$(LMPCWRAP): LAMMPS-wrapper.cpp | $(BUILD_DIR)
