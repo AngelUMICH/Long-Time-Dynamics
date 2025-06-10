@@ -382,7 +382,6 @@ SUBROUTINE KMC
   use MPI
   use LMP_DRIVER
   use Clusters
-  use Basin
 
   implicit none
 
