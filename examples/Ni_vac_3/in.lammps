@@ -1,0 +1,10 @@
+3
+read_data tri-vacancy.nickel.data
+group empty subtract all all
+delete_atoms group empty compress yes
+
+4
+pair_style eam/alloy
+pair_coeff * * ./NiAl_Mishin_2004.eam.alloy Ni
+neighbor 0 bin
+neigh_modify every 1 delay 1 check yes

@@ -1,0 +1,32 @@
+1                 # REST          [ --  ] I  Using Restart File? 1:No 2:Yes
+3                 # SIGY          [ --  ] I  Damage mode 2:Frenkel, 3:Vacancy
+1                 # TPBC          [ --  ] I  Boundary Condition: 1:PBC 2:Absorbing
+2                 # TCRY          [ --  ] I  Material Crystallinity: 1:Single 2:Poly
+2                 # NTSTEP        [ --  ] I  Total Number of Step
+1                 # NFREQ         [ --  ] I  Output Frequency
+10000             # NDEMAX        [ --  ] I  Maximum Number of Defect
+20000             # NAVMAX        [ --  ] I  Maximum Number of Atoms in the AVs
+16                # NDIMER        [ --  ] I  Number of dimer searches per iteration 
+0.6               # VACLIM        [ eV  ] R  Vacancy Energy Barrier Threshold
+0.005              # INTLIM        [ eV  ] R  Interstitial Energy Barrier Threshold
+3.52            # RLAT          [ A   ] R  Lattice Constant
+5.3               # PCUTR         [ A   ] R  Cutoff for the pair    term of potential
+4.21       	      # DCUTR     	  [ A   ] R  Cutoff for the density term of potential
+0.26              # DECUT		      [ a   ] R  Cutoff for Find Defects Wigner-Ziets
+1200               # NDSMAX        [ --  ] I  Maximum Number of Dimer Steps
+3                 # NDRMAX        [ --  ] I  Maximum Number of Rotation in Each Dimer Step
+0.002             # RDIMER        [ a   ] R  The Distance Between the Dimer
+0.100             # FNRMAX        [ --  ] R  The Maximum Rotation Force
+0.005             # FNRMIN        [ --  ] R  The Minimum Rotation Force
+0.010             # DSTPEF        [ a   ] R  The Step Size in Dimer Translation using CG
+0.070             # DSTEPM        [ a   ] R  The Maximum Step Size in Dimer Translation
+500.0             # TEMP          [ k   ] R  Temperature
+0.0               # PKAE          [ ev  ] R  PKA Energy (Ion Mode only)
+0.001             # DRATE         [dpa/s] R  Irradiation Dose Rate
+0                # NFREKL        [ dpa ] I  Number of Defects to Create (Non-cascade Mode Only)
+0.000E+00         # TIME          [ s   ] R  Time
+false              # SIGRELON      [ b   ] L  Switch for Stress Box Relaxation at First Step
+0.0               # SIGY          [ bar ] R  Stress in the X direction
+0.0               # SIGY          [ bar ] R  Stress in the Y direction
+0.0               # SIGZ          [ bar ] R  Stress in the Z direction
+
