@@ -342,8 +342,6 @@ contains
 
     class(LAMMPS_Container), intent(inout) :: this
 
-    if (mod(ISTEP, NFREQ) .eq. 0 .and. RANK .eq. 0) write (*, '(A)') 'Relaxing System'
-
     call lammps_command(this%lammpsInstance, 'min_style cg')
     call lammps_command(this%lammpsInstance, 'minimize 1.0e-13 1.0e-13 2000 15000')
 
@@ -351,8 +349,6 @@ contains
 
     ENCALC = this%energy
     PRESS = -this%pressure !reversed sign; positive is tension
-
-    if (mod(ISTEP, NFREQ) .eq. 0 .and. RANK .eq. 0) write (*, '(A)') 'Finished Relaxation'
 
   end subroutine relaxSystemEnergy
 

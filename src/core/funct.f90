@@ -203,65 +203,69 @@ subroutine OVITO
 
   CHARACTER(len=200) FILENAME
 
-!!CREATING THE CURRENT DEFECT POSITION FILE
+  if (MOD(ISTEP, NFREQ) .EQ. 0 .AND. RANK .EQ. 0) then
 
-  write (FILENAME, '(A8, I0, A4)') './DUMP/D', ISTEP, '.OUT'
+    !!CREATING THE CURRENT DEFECT POSITION FILE
 
-  open (UNIT=29, FILE=TRIM(FILENAME))
+    write (FILENAME, '(A8, I0, A4)') './DUMP/D', ISTEP, '.OUT'
 
-  write (29, '(A)') 'ITEM: TIMESTEP'
-  write (29, *) ISTEP
-  write (29, '(A)') 'ITEM: NUMBER OF ATOMS'
-  write (29, *) NDVAC + NDINT
-  write (29, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
-  write (29, '(2F10.4,I5)') 0.00, BOXX, 3
-  write (29, '(2F10.4,I5)') 0.00, BOXY, 3
-  write (29, '(2F10.4,I5)') 0.00, BOXZ, 3
-  write (29, '(A)') 'ITEM: ATOMS x y z type'
+    open (UNIT=29, FILE=TRIM(FILENAME))
 
-  do I = 1, NATOMC
+    write (29, '(A)') 'ITEM: TIMESTEP'
+    write (29, *) ISTEP
+    write (29, '(A)') 'ITEM: NUMBER OF ATOMS'
+    write (29, *) NDVAC + NDINT
+    write (29, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
+    write (29, '(2F10.4,I5)') 0.00, BOXX, 3
+    write (29, '(2F10.4,I5)') 0.00, BOXY, 3
+    write (29, '(2F10.4,I5)') 0.00, BOXZ, 3
+    write (29, '(A)') 'ITEM: ATOMS x y z type id'
 
-    if (TI(I) .NE. 1) then
+    do I = 1, NATOMC
 
-      write (29, '(3F12.5,I5)') RA(:, I), 2
+      if (TI(I) .NE. 1) then
 
-    end if
+        write (29, '(3F12.5,X,I0,X,I0)') RA(:, I), 2, i
 
-  end do
+      end if
 
-  do I = 1, NATOMR
+    end do
 
-    if (TV(I) .NE. 1) then
+    do I = 1, NATOMR
 
-      write (29, '(3F12.5,I5)') RR(:, I), 1
+      if (TV(I) .NE. 1) then
 
-    end if
+        write (29, '(3F12.5,X,I0,X,I0)') RR(:, I), 1, i
 
-  end do
+      end if
 
-  close (29)
+    end do
 
-!!CREATING DISLOCATION ANALYSIS FILE
+    close (29)
 
-  write (FILENAME, '(A12, I0, A4)') './DUMP/DXA/A', ISTEP, '.OUT'
+    !!CREATING DISLOCATION ANALYSIS FILE
 
-  open (UNIT=30, FILE=TRIM(FILENAME))
+    write (FILENAME, '(A12, I0, A4)') './DUMP/DXA/A', ISTEP, '.OUT'
 
-  write (30, '(A)') 'ITEM: TIMESTEP'
-  write (30, *) ISTEP
-  write (30, '(A)') 'ITEM: NUMBER OF ATOMS'
-  write (30, *) NATOMC
-  write (30, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
-  write (30, '(2F15.8,I1)') 0.00, BOXX, 3
-  write (30, '(2F15.8,I1)') 0.00, BOXY, 3
-  write (30, '(2F15.8,I1)') 0.00, BOXZ, 3
-  write (30, '(A)') 'ITEM: ATOMS x y z'
+    open (UNIT=30, FILE=TRIM(FILENAME))
 
-  do I = 1, NATOMC
-    write (30, '(3F14.5)') RA(1, I),RA(2, I),RA(3, I)
-  end do
+    write (30, '(A)') 'ITEM: TIMESTEP'
+    write (30, *) ISTEP
+    write (30, '(A)') 'ITEM: NUMBER OF ATOMS'
+    write (30, *) NATOMC
+    write (30, '(A)') 'ITEM: BOX BOUNDS pp pp pp'
+    write (30, '(2F15.8,I1)') 0.00, BOXX, 3
+    write (30, '(2F15.8,I1)') 0.00, BOXY, 3
+    write (30, '(2F15.8,I1)') 0.00, BOXZ, 3
+    write (30, '(A)') 'ITEM: ATOMS x y z'
 
-  close (30)
+    do I = 1, NATOMC
+      write (30, '(3F14.5)') RA(1, I),RA(2, I),RA(3, I)
+    end do
+
+    close (30)
+    
+  end if
 
 end subroutine OVITO
 !***********************************************************************!
@@ -369,7 +373,7 @@ subroutine CREATE_VACANCIES(NFRKL, IDS)
 
   !Upadate all other processes on changed parameters
   NATOMC = int(lammps_get_natoms(lmpSystem%getLammpsPtr()))
-  call lmpSystem%getPositions
+  call lmpSystem%getPositions()
 
 end subroutine CREATE_VACANCIES
 !***********************************************************************!

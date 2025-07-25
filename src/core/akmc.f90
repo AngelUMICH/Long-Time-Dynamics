@@ -1,20 +1,19 @@
-SUBROUTINE drld
+subroutine drld
 
   use system
   use lmp_driver
-
-  IMPLICIT NONE
-
+  
+  implicit none
+  
   if (BSTEP == 0) then
     call lmpSystem%relaxSystemPressure()
     call lmpSystem%getPositions()
     call lmpDimer%changeBoxDimensions(boxx, boxy, boxz)
   end if
-
+  
   do ISTEP = (BSTEP + 1), (NTSTEP + BSTEP)
 
     call DOSE()
-
     call FIND_DEFECT()
 
     if (RANK .EQ. 0) THEN
@@ -22,150 +21,51 @@ SUBROUTINE drld
       call DFSEL()
     end if
 
-    call SPS()
-    call KMC()
-    if (.NOT. SKIP) call OPT()
+    call BEM()
     call RESTART()
-
+    call FIND_DEFECT()
+    call OVITO()
+    
   end do
-
-end SUBROUTINE drld
+  
+end subroutine drld
 !***********************************************************************!
-subroutine SPS
+subroutine DOSE
 
-  use MPI
   use SYSTEM
-  use DEFECT
-  use KMCVAR
-
-  use CLASS_DIMER
   use LMP_DRIVER
   use Clusters
 
   implicit none
 
-  type(Dimer) :: ADIMER
+  if (TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 1) THEN
 
-  integer :: J, K, SR_LEN
-  real*8 :: x,y,z,r
-
-  SR = 0.0D0; SRBUFF = 0.0D0
-  EM = 0.0D0; EMBUFF = 0.0D0
-  ND = 0.0D0; NDBUFF = 0.0D0
-  SR_LEN = SIZE(SR)
-
-  call defects%syncClusterData(lmpSystem%getCommunicator())
-  x = defects%selectedCluster%comx
-  y = defects%selectedCluster%comy
-  z = defects%selectedCluster%comz
-  r = defects%selectedCluster%radiusAV
-
-  !CARRY OUT SADDLE POINT SEARCHING
-  do J = LDIMERI, UDIMERI
-
-    call DIMER_INIT(ADIMER, x, y, z, r, lmpDimer)
-    call DIMER_SEARCH(ADIMER)
-
-    if (lmpDimer%getRank() .EQ. 0) then
-      ND(J) = ADIMER%NATOM1
-      EM(J) = ADIMER%EMDIFF
-    
-      !STORE THE SADDLE POINT CONFIGURATION,SR:POSITION OF SADDLE POINT
-      do K = 1, ND(J)
-
-        SR(1, K, J) = ADIMER%SX(1, K)
-        SR(2, K, J) = ADIMER%SX(2, K)
-        SR(3, K, J) = ADIMER%SX(3, K)
-        SR(4, K, J) = ADIMER%SI(1, K)
-      end do
+    if (RANK .EQ. 0) THEN
+      write (*, '(3A14)') 'TIME', ' TIME_LAST', ' DTIME'
+      write (*, '(2E14.5,E14.5)') TIME, TIME_LAST, DTIME
     end if
 
-    if (mod(ISTEP, NFREQ) .eq. 0 .and. lmpDimer%getRank() .eq. 0) then
-      write (*, '(A,1I12,F14.5)') 'SPS', J, EM(J)
+    if (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
+
+      call BASIC_DAMAGE(NFREKL)
+
+      call lmpSystem%assignPositions
+
     end if
 
-    call DIMER_FINISH(ADIMER)
-  end do
+    call lmpSystem%relaxSystemEnergy
 
-  call MPI_ALLREDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, lmpSystem%getCommunicator(), IERR)
-  call MPI_ALLREDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, lmpSystem%getCommunicator(), IERR)
-  call MPI_ALLREDUCE(ND, NDBUFF, NDIMER, MPI_INT,   MPI_SUM, lmpSystem%getCommunicator(), IERR)
+    call lmpSystem%getPositions
 
-  SR = SRBUFF
-  EM = EMBUFF
-  ND = NDBUFF
+    TIME_LAST = TIME
 
-end subroutine SPS
-!***********************************************************************!
-SUBROUTINE OPT
-
-  USE SYSTEM
-  USE KMCVAR
-  USE DEFECT
-  USE LMP_DRIVER
-  USE MPI
-
-  IMPLICIT NONE
-
-  INTEGER I, J, NSTMP
-
-  if (RANK .EQ. 0) THEN
-
-    !THE TOTAL NUMBER OF THE ATOMS INSIDE THE CHOSEN AV
-
-    NSTMP = ND(EID)
-
-    !PASSING THE POSITIONS OF ATOMS INSIDE AV TO THE SYSTEM
-
-    do I = 1, NSTMP
-
-      J = INT(SR(4, I, EID))
-
-      RA(1, J) = SR(1, I, EID)
-      RA(2, J) = SR(2, I, EID)
-      RA(3, J) = SR(3, I, EID)
-
-    end do
+    if (RANK == 0) CALC = .TRUE.
 
   end if
 
-  call lmpSystem%assignPositions
-
-  call lmpSystem%relaxSystemEnergy
-
-  call lmpSystem%getPositions
-
-  if (RANK .EQ. 0) THEN
-
-    !ISTEP:CURRENT NUMBER OF STEPS,NDTOT:TOTAL NUMBER OF DEFECTS
-    !JID:DEFECT ID,EID:EVENT ID,EM:MIGRATION ENERGY BARRIER
-    !ENCALC:THE SYSTEM ENERGY AFTER OPT,TIME:CURRENT TIME
-
-    if (MOD(ISTEP, NFREQ) .EQ. 0) THEN
-      write (*, '(3X, 2A12, 7A14)') 'STEP', 'DIMER ID', 'BARRIER', &
-        'SYS ENERGY', 'TIME', 'Px', 'Py', 'Pz', 'DPA'
-
-      write (*, '(A,2I12,2F14.5,4ES14.5,E14.5)') 'ITR', ISTEP, EID, EM(EID), &
-        ENCALC, TIME, PRESS(1), PRESS(2), PRESS(3), DPA
-
-      write(*,*)
-
-    end if
-
-  end if
-
-  !OUTPUT DEFECTS FOR OVITO
-
-  call FIND_DEFECT
-
-  if (MOD(ISTEP, NFREQ) .EQ. 0 .AND. RANK .EQ. 0) call OVITO
-
-  RETURN
-
-end SUBROUTINE OPT
-
+end subroutine DOSE
 !***********************************************************************!
-SUBROUTINE DCIDNT
+subroutine DCIDNT
   use SYSTEM
   use DEFECT
   use Clusters
@@ -262,7 +162,6 @@ SUBROUTINE DCIDNT
 
   if (mod(ISTEP, NFREQ) .eq. 0) then
     call DEFECT_PRINT(PX, NDTOT)
-    call defects%printBannedCount()
     call flush(6)
   end if
 
@@ -276,30 +175,28 @@ SUBROUTINE DCIDNT
     stop
   end if
 
-end SUBROUTINE DCIDNT
+end subroutine DCIDNT
 !***********************************************************************!
-!************************************************************
-! Idea is to decrease dimer search for defects using KMC    *
-! to select a defect for dimer search - migration energy    *
-! was pre-calculated one                                    *
-!                                                           *
-! Gao - 2021                                                *
-!************************************************************
-SUBROUTINE DFSEL
-  USE SYSTEM
-  USE DEFECT
-  USE KMCVAR
+subroutine DFSEL
+  !************************************************************
+  ! Idea is to decrease dimer search for defects using KMC    *
+  ! to select a defect for dimer search - migration energy    *
+  ! was pre-calculated one                                    *
+  !                                                           *
+  ! Gao - 2021                                                *
+  !************************************************************
+  use SYSTEM
+  use DEFECT
+  use KMCVAR
   use Clusters
 
-  IMPLICIT NONE
+  implicit none
 
   REAL*8 rnd, speed, dt, scalef, sump, prop
   real*8 :: x,y,z,r
   integer :: i, j, k, jmapsz, numClusters
   integer :: clusterType
   REAL*8, allocatable, dimension(:, :) :: pj
-
-  SKIP = .FALSE.
 
   speed = 0.0d0
   jmapsz = 1000
@@ -308,8 +205,6 @@ SUBROUTINE DFSEL
   allocate (pj(1:2, 1:ndtot))
 
   do i = 1, numClusters
-
-    if (defects%clusters(i)%isBanned()) cycle
 
     clusterType = defects%clusters(i)%type
     j = abs(clusterType)
@@ -340,8 +235,6 @@ SUBROUTINE DFSEL
 
   do i = 1, ndtot
 
-    if (defects%clusters(i)%isBanned()) cycle
-
     clusterType = defects%clusters(i)%type
 
     if (clusterType .lt. 0) then
@@ -371,10 +264,201 @@ SUBROUTINE DFSEL
 
   deallocate (pj)
 
-end SUBROUTINE DFSEL
-
+end subroutine DFSEL
 !***********************************************************************!
-SUBROUTINE KMC
+subroutine BEM
+  ! Basin escape method (BEM) uses MRM to quickly leave basins.
+
+  use BasinNetwork, only: BasinNetworkType
+  use Event, only: EventType
+  use Basin, only: BasinType
+  
+  type(BasinNetworkType) :: network !resets every call of the subroutine
+  type(EventType) :: event
+  type(BasinType) :: basin
+  logical :: continueSearch
+
+  continueSearch = .True.
+
+  do while (continueSearch)
+    call SPS()
+    call EBN(network, continueSearch)
+    call KMC(network, continueSearch)
+    basin = network%getBasin(network%getActiveBasinId())
+    event = basin%getAbsorbingEvent(network%getActiveEventId())
+    call OPT(event, continueSearch)
+  end do
+
+end subroutine BEM
+!***********************************************************************!
+subroutine SPS()
+
+  use MPI
+  use SYSTEM
+  use DEFECT
+  use KMCVAR
+
+  use CLASS_DIMER
+  use LMP_DRIVER
+  use Clusters
+
+  implicit none
+
+  type(Dimer) :: ADIMER
+
+  integer :: J, K, SR_LEN
+  real*8 :: x,y,z,r
+
+  SR = 0.0D0; SRBUFF = 0.0D0
+  EM = 0.0D0; EMBUFF = 0.0D0
+  ND = 0.0D0; NDBUFF = 0.0D0
+  SR_LEN = SIZE(SR)
+
+  call defects%syncClusterData(lmpSystem%getCommunicator())
+  x = defects%selectedCluster%comx
+  y = defects%selectedCluster%comy
+  z = defects%selectedCluster%comz
+  r = defects%selectedCluster%radiusAV
+
+  !CARRY OUT SADDLE POINT SEARCHING
+  do J = LDIMERI, UDIMERI
+
+    call DIMER_INIT(ADIMER, x, y, z, r, lmpDimer)
+    call DIMER_SEARCH(ADIMER)
+
+    if (lmpDimer%getRank() .EQ. 0) then
+      ND(J) = ADIMER%NATOM1
+      EM(J) = ADIMER%EMDIFF
+    
+      !STORE THE SADDLE POINT CONFIGURATION,SR:POSITION OF SADDLE POINT
+      do K = 1, ND(J)
+
+        SR(1, K, J) = ADIMER%SX(1, K)
+        SR(2, K, J) = ADIMER%SX(2, K)
+        SR(3, K, J) = ADIMER%SX(3, K)
+        SR(4, K, J) = ADIMER%SI(1, K)
+      end do
+    end if
+
+    if (mod(ISTEP, NFREQ) .eq. 0 .and. lmpDimer%getRank() .eq. 0) then
+      write (*, '(A,1I12,F14.5)') 'SPS', J, EM(J)
+    end if
+
+    call DIMER_FINISH(ADIMER)
+  end do
+
+  call MPI_ALLREDUCE(SR, SRBUFF, SR_LEN, MPI_REAL8, MPI_SUM, lmpSystem%getCommunicator(), IERR)
+  call MPI_ALLREDUCE(EM, EMBUFF, NDIMER, MPI_REAL8, MPI_SUM, lmpSystem%getCommunicator(), IERR)
+  call MPI_ALLREDUCE(ND, NDBUFF, NDIMER, MPI_INT,   MPI_SUM, lmpSystem%getCommunicator(), IERR)
+
+  SR = SRBUFF
+  EM = EMBUFF
+  ND = NDBUFF
+
+end subroutine SPS
+!***********************************************************************!
+subroutine EBN(net, continueSearch)
+  ! Expand basin network (EBN) with new found saddle points.
+  ! Put the events into a basin and then into the network.
+
+  use SYSTEM
+  use DEFECT
+  use KMCVAR
+  use BasinNetwork
+  use Basin
+  use Event
+
+  type(BasinNetworkType), intent(inout) :: net
+  logical, intent(in) :: continueSearch
+
+  integer :: i, j
+  integer :: atomCount, atomId, numEvents
+  integer :: matchingBasinId, activeBasinId, activeEventId, latestBasinId
+  logical :: isUnique
+  integer, allocatable :: atomIds(:)
+  real*8, allocatable :: atomPositions(:,:)
+
+  type(BasinType) :: basin, tempBasin
+  type(EventType) :: event
+
+  ! Set basin state using atom IDs and positions
+  
+  atomCount = ND(1)
+  allocate(atomIds(atomCount))
+  allocate(atomPositions(3, atomCount))
+
+  do i = 1, atomCount
+    atomId = int(SR(4, i, 1))
+    atomIds(i) = atomId
+    atomPositions(1, i) = RA(1, atomId)
+    atomPositions(2, i) = RA(2, atomId)
+    atomPositions(3, i) = RA(3, atomId)
+  end do
+  
+  call basin%setState(atomIds, atomPositions)
+  
+  ! Now define the events and add them to the basin
+  numEvents = NDIMER
+  
+  do i = 1, numEvents
+    if (EM(i) < 10.D0) then
+      do j = 1, atomCount
+        atomPositions(1, j) = SR(1, j, i)
+        atomPositions(2, j) = SR(2, j, i)
+        atomPositions(3, j) = SR(3, j, i)
+      end do
+      
+      call event%setState(atomIds, atomPositions)
+      call event%setEnergy(EM(i))
+      call basin%addEvent(event)
+    end if
+  end do
+
+  ! Before adding the new basin to the network check each if each event
+  ! leads to a new unique basin. If not, then flag the event. Reset
+  ! after each check.
+  
+  i = 1
+
+  do while (i <= basin%getAbsorbingCount())
+    
+    event = basin%getAbsorbingEvent(i)
+    call OPT(event, continueSearch)
+
+    do j = 1, atomCount
+      atomId = atomIds(j)
+      atomPositions(1, j) = RA(1, atomId)
+      atomPositions(2, j) = RA(2, atomId)
+      atomPositions(3, j) = RA(3, atomId)
+    end do
+
+    call tempBasin%setState(atomIds, atomPositions)
+    call net%isUniqueBasin(tempBasin, isUnique, matchingBasinId)
+    if (.not. isUnique) then
+      call basin%flagEvent(i, matchingBasinId)
+      i = i - 1
+    end if
+
+    if (allocated(atomPositions)) deallocate(atomPositions)
+    atomPositions = basin%getState()
+    call event%setState(atomIds, atomPositions)
+    call OPT(event, continueSearch)
+
+    i = i + 1
+
+  end do
+
+  call net%addBasin(basin)
+  if (net%getBasinCount() > 1) then
+    activeBasinId = net%getActiveBasinId()
+    activeEventId = net%getActiveEventId()
+    latestBasinId = net%getBasinCount()
+    call net%flagBasinEvent(activeBasinId, activeEventId, latestBasinId)
+  end if
+  
+end subroutine EBN
+!***********************************************************************!
+subroutine KMC(net, continueSearch)
 
   use SYSTEM
   use KMCVAR
@@ -382,151 +466,156 @@ SUBROUTINE KMC
   use MPI
   use LMP_DRIVER
   use Clusters
+  use BasinNetwork
+  use Basin
+  use Event
+  use MRM
 
   implicit none
 
-  integer :: I, K, jmapsz, type
+  type(BasinNetworkType), intent(inout) :: net
+  logical, intent(inout) :: continueSearch
 
-  real*8 :: RND, dt, scalef, prop, TOTFQSUM, EXITFQSUM
-  real*8 :: x, y, z
+  integer :: I, K, jmapsz, type, basinId, eventId
+  integer :: numBasins, maxNumEventsPerBasin
+  real*8 :: RND, dt, scalef, prop, rate, TOTFQSUM, TAUSUM
+  real*8, allocatable, dimension(:,:) :: newRates
 
-  logical :: ban
+  type(BasinType) :: basin
+  type(EventType) :: event
 
   character(LEN=40) str
+
+  ! Use Mean Rate Method to calculate new rates
+  call calcMRM(net, temp, newRates, TAUSUM)
 
   if (rank .eq. 0) then
 
     FQSUM = 0.0D0 ! frequency sum of current transition states
     TOTFQSUM = 0.0D0 ! approximate frequency sum of entire system
-    EXITFQSUM = 0.0D0 ! frequency sum of exit events after mean rate
     POSUM = 0.0D0 ! probability sum
     jmapsz = 1000
-    
-    x = defects%selectedCluster%comx
-    y = defects%selectedCluster%comy
-    z = defects%selectedCluster%comz
-    type = defects%selectedCluster%type
 
-    !CALCULATE FREQUENCY BASED ON THE MIGRATION ENERGY BARRIER
-    !THE PREFACTOR HERE IS USED TO BE CONSTANT (NOT TRUE IN GENERAL)
-    !THE PREFACTOR CALCUATED ON THE FLY IS IMPLEMENTED IN ANOTHER VERSION
-    ! Now considering good dimer search - Gao 2021
+    ! Calculate total exiting rate
+    numBasins = size(newRates,1)
+    maxNumEventsPerBasin = size(newRates,2)
 
-    do K = 1, NDIMER
-      if (EM(k) < 10.0) then
-        FQ(K) = 1.0D12*EXP(-EM(K)/KB/TEMP)
-        FQSUM = FQSUM + FQ(K)
-        ! For a single basin state the following is true.
-        ! When consider more basin states mean time per escape
-        ! must be considered.
-        if (EM(K) >= merge(VACLIM,INTLIM,type<0)) then
-          EXITFQSUM = EXITFQSUM + FQ(K)*1
+    do basinId = 1, numBasins
+      do eventId = 1, maxNumEventsPerBasin
+        rate = newRates(basinId, eventId)
+        if (rate > 0.0D0) then
+          FQSUM = FQSUM + rate
         end if
-      end if
+      end do
     end do
 
     ! Determine mean time in KMC step
     call RANDOM_NUMBER(RND)
-    if (FQSUM > 0.0) then
-      TOTFQSUM = FQSUM+OBFQSUM
+    TOTFQSUM = TAUSUM+OBFQSUM
+    if (FQSUM > 0.0D0 .and. TOTFQSUM > 0.0D0) then
       TMEAN = -LOG(RND)/(TOTFQSUM)
-      dt = 1.0/EXITFQSUM
+      dt = 1.0/FQSUM
       scalef = dt*dfloat(jmapsz)
     end if
 
     ! Randomly choosing event based on probability
     prop = rnd*float(jmapsz)
-    do K = 1, NDIMER
-      ! Only consider absorbing events (i.e above limit)
-      if (EM(k) < 10.0 .and. EM(K) >= merge(VACLIM,INTLIM,type<0)) then
-        POSUM = POSUM + FQ(K)*scalef
-      end if
+    print *, "PROP =", prop
+    do basinId = 1, numBasins
+      do eventId = 1, maxNumEventsPerBasin
+        rate = newRates(basinId, eventId)
+        if (rate > 0.0D0) then
+          POSUM = POSUM + rate*scalef
+        end if
+        if (POSUM >= prop) exit
+      end do
       if (POSUM >= prop) exit
     end do
 
-    ! Saving dimer ID of chosen event
-    EID = K
-    
-    ! Updating time and pre-selection rates or skipping KMC step
-    if (EM(EID) <= EMSKIP .AND. EID <= NDIMER) THEN
-      TIME = TIME + TMEAN
-      if (EM(EID) > 0) THEN
-        I = abs(type)
-        K = merge(1, 2, type < 0)
-        EMIG(K, I) = (EMIG(K, I)*EMIC(K, I) + EM(EID))/(EMIC(K, I) + 1)
-        EMIC(K, I) = EMIC(K, I) + 1
-      end if
-    else
-      SKIP = .TRUE.
-      write (STR, '(F8.5)') EMSKIP
-      write (6, *) 'MIGRATION ENERGY GREATER THAN '//TRIM(STR)// &
-                   'eV -> SKIPPING'
-    end if
-
-    ! Print stats of KMC selection
-    if (MOD(ISTEP, NFREQ) == 0) THEN
-      write (6, '(A,I10,A,F10.4)') 'EID: ', EID, '  RND: ', RND
-      write (6, '(A,F12.9)') 'Exiting Basin Prob. : ', EXITFQSUM/FQSUM
-    end if
-
   end if
 
-  ! If defect had no significant energy barriers ban that defect
-  ban = .true.
-  do i = 1, NDIMER
-    if (EM(i) > 1e-3 .and. EM(i) < 10.0D0) ban = .false.
-  end do
+  call MPI_BCAST(basinId, 1, MPI_INT, 0, lmpSystem%getCommunicator(), IERR)
+  call MPI_BCAST(eventId, 1, MPI_INT, 0, lmpSystem%getCommunicator(), IERR)
 
-  call MPI_BCAST(ban, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), ierr)
+  basin = net % getBasin(basinId)
+  event = basin % getAbsorbingEvent(eventId)
+  eventEnergy = event % getEnergy()
+  type = defects%selectedCluster%type
 
-  if (ban) then
-    call defects%banCluster(defects%selectedCluster)
-    if (rank == 0) write(*,'(A,3F14.5)') 'Banned defect at: ', x, y, z
+  EID = eventId
+
+  call net%setActiveIds(basinId, eventId)
+
+  if (eventEnergy < 10.0 .and. eventEnergy >= merge(VACLIM,INTLIM,type<0)) then
+      continueSearch = .false.
+  else
+      continueSearch = .true.
   end if
 
-  ! Update important data to all procs
+  ! Only update time and energies when search for KMC step is done.
+  if (.not. continueSearch) then
+    TIME = TIME + TMEAN
+    eventEnergy = -KB*temp*log(TAUSUM/NU)
+    if (eventEnergy > 0.0D0) then
+      I = abs(type)
+      K = merge(1, 2, type < 0)
+      EMIG(K, I) = (EMIG(K, I)*EMIC(K, I) + eventEnergy)/(EMIC(K, I) + 1)
+      EMIC(K, I) = EMIC(K, I) + 1
+    end if
+  end if
+
+  call MPI_BCAST(continueSearch, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), IERR)
   call MPI_BCAST(TIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
   call MPI_BCAST(DTIME, 1, MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
-  call MPI_BCAST(SKIP, 1, MPI_LOGICAL, 0, lmpSystem%getCommunicator(), IERR)
 
-  RETURN
-
-end SUBROUTINE KMC
+end subroutine KMC
 !***********************************************************************!
-SUBROUTINE DOSE
+subroutine OPT(event, continueSearch)
 
-  USE SYSTEM
-  USE LMP_DRIVER
-  use Clusters
+  use SYSTEM
+  use KMCVAR
+  use DEFECT
+  use LMP_DRIVER
+  use MPI
+  use BasinNetwork
+  use Basin
+  use Event
 
-  IMPLICIT NONE
+  implicit none
 
-  if (TIME - TIME_LAST .GE. DTIME .OR. ISTEP .EQ. 1) THEN
+  type(EventType), intent(in) :: event
+  logical, intent(in) :: continueSearch
+  
+  integer i, atomId, numAtoms
+  integer, allocatable, dimension(:) :: ids
+  real*8, allocatable, dimension(:,:) :: pos
 
-    if (RANK .EQ. 0) THEN
-      write (*, '(3A14)') 'TIME', ' TIME_LAST', ' DTIME'
-      write (*, '(2E14.5,E14.5)') TIME, TIME_LAST, DTIME
+  ! Update the system with event state
+
+  numAtoms = event % getStateSize()
+  ids = event % getIds()
+  pos = event % getState()
+
+  do i = 1, numAtoms
+    atomId = ids(i)
+    RA(1, atomId) = pos(1, i)
+    RA(2, atomId) = pos(2, i)
+    RA(3, atomId) = pos(3, i)
+  end do
+
+  call lmpSystem%assignPositions
+  call lmpSystem%relaxSystemEnergy
+  call lmpSystem%getPositions
+
+  if (.not. continueSearch) then
+    if (RANK == 0 .and. MOD(ISTEP, NFREQ) .EQ. 0) THEN
+      write (*, '(3X, 2A12, 7A14)') 'STEP', 'DIMER ID', 'BARRIER', &
+        'SYS ENERGY', 'TIME', 'Px', 'Py', 'Pz', 'DPA'
+      write (*, '(A,2I12,2F14.5,4ES14.5,E14.5)') 'ITR', ISTEP, EID, &
+        eventEnergy, ENCALC, TIME, PRESS(1), PRESS(2), PRESS(3), DPA
+      write(*,*)
     end if
-
-    if (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
-
-      call BASIC_DAMAGE(NFREKL)
-
-      call lmpSystem%assignPositions
-
-    end if
-
-    call lmpSystem%relaxSystemEnergy
-
-    call lmpSystem%getPositions
-
-    TIME_LAST = TIME
-
-    if (RANK == 0) CALC = .TRUE.
-
-    call defects%clearBannedList()
-
   end if
 
-end SUBROUTINE
+end subroutine OPT
 !***********************************************************************!
