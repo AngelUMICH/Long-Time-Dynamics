@@ -94,6 +94,9 @@ subroutine sysInput
   allocate (RA(3, NATOMC + NDEMAX))
   call lmpSystem%getPositions
 
+  !Read the reference lattice
+  call readRefLattice
+
 end subroutine sysInput
 !***********************************************************************!
 !!SYSTEM INITITIALIZATION
@@ -126,6 +129,7 @@ subroutine sysInit
   allocate (SEED(N))
   call RANDOM_SEED(GET=SEED)
 
+  ISTEP = 0
   BSTEP = 0
 
   FDCONV = 1.0D-5
@@ -164,15 +168,9 @@ subroutine sysInit
   ONDTOT = 0
   NDTOT = 0
 
-  !! KMC ENERGY BARRIER
-
-  EMSKIP = -1*8.617E-5*TEMP*LOG(DRATE/1E12)
-
   !! SYSTEM PROPERTIES
 
   PRESS = 0.0D0
-
-  NATOMR = NATOMC
 
   allocate(FQ(NDIMER)); FQ = 0.0D0
   allocate(EM(NDIMER)); EM = 0.0D0
@@ -214,9 +212,6 @@ subroutine sysInit
 
   SKIP = .FALSE.
 
-  !Read the reference lattice
-  call readRefLattice
-
   ! Read the paratemers based on restart mode
   if (REST .eq. 1) then
     call readDefaultParameters()
@@ -254,6 +249,7 @@ subroutine readRefLattice
   if (.not. allocated(RR)) allocate(RR(3,NATOMR))
   do i= 1, natomr
     read(21, *) (RR(j,i), j=1,3)
+    RR(:,i) = RR(:,i) / RLAT
   end do
   close(21)
 

@@ -47,12 +47,17 @@ if(NOT GIT_RESULT EQUAL 0)
   set(GIT_VERSION "unknown")
 endif()
 
-# Add LAMMPS module directory first to ensure it's built before core
+# Add subdirectories in order of dependencies
+# Basin modules contain basic data structures
+add_subdirectory(src/basin)
+# LAMMPS module directory must be built before core
 add_subdirectory(src/flammps)
+# Core modules depend on both basin and flammps
 add_subdirectory(src/core)
 
 # Create the main executable
 add_executable(opld 
+  $<TARGET_OBJECTS:basin_lib>
   $<TARGET_OBJECTS:lammps_mod>
   $<TARGET_OBJECTS:core_lib> 
   $<TARGET_OBJECTS:lammpswrap_obj>
@@ -62,13 +67,14 @@ add_executable(opld
 target_include_directories(opld PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/basin
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flammps
     ${CMAKE_Fortran_MODULE_DIRECTORY}
     ${LAMMPS_INCLUDE}
 )
 
 # Make sure the executable depends on all component libraries
-add_dependencies(opld lammps_mod core_lib lammpswrap_obj)
+add_dependencies(opld basin_lib lammps_mod core_lib lammpswrap_obj)
 
 # Set link libraries for the main executable
 target_link_libraries(opld PRIVATE 
@@ -93,6 +99,7 @@ target_compile_definitions(opld PRIVATE GIT_VERSION_F=\"${GIT_VERSION}\")
 # Add configuration-specific compiler flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(opld PRIVATE -g -O0 -Wall -fbounds-check)
+    target_compile_options(basin_lib PRIVATE -g -O0 -Wall -fbounds-check)
     target_compile_options(core_lib PRIVATE -g -O0 -Wall -fbounds-check)
     target_compile_options(lammps_mod PRIVATE -g -O0 -Wall -fbounds-check)
 else()

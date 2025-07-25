@@ -17,12 +17,13 @@ set_source_files_properties(lmp.f90 PROPERTIES OBJECT_DEPENDS
     "${CMAKE_Fortran_MODULE_DIRECTORY}/lammps.mod"
 )
 
-# Add explicit dependency on LAMMPS module
-add_dependencies(core_lib lammps_mod)
+# Add explicit dependencies
+add_dependencies(core_lib lammps_mod basin_lib)
 
-# Make sure core_lib can find the LAMMPS module files
+# Make sure core_lib can find all required module files
 target_include_directories(core_lib PRIVATE 
     ${CMAKE_Fortran_MODULE_DIRECTORY}  # Use the central module directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/../basin  # Path to basin source directory
 )
 
 # Set module directory for this library's modules
