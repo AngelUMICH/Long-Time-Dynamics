@@ -62,6 +62,7 @@ contains
     
     ! Calculate residence time for each transient event
     do i = 1, nBasinCount
+      rateSum = 0.0d0
       tempb = net % getBasin(i)
       nTransient = tempb % getTransientCount()
       do eventId = 1, nTransient

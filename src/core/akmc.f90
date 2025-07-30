@@ -511,7 +511,7 @@ subroutine KMC(net, continueSearch)
 
     ! Determine mean time in KMC step
     call RANDOM_NUMBER(RND)
-    TOTFQSUM = TAUSUM+OBFQSUM
+    TOTFQSUM = (1/TAUSUM)+OBFQSUM
     if (FQSUM > 0.0D0 .and. TOTFQSUM > 0.0D0) then
       TMEAN = -LOG(RND)/(TOTFQSUM)
       dt = 1.0/FQSUM
@@ -555,7 +555,6 @@ subroutine KMC(net, continueSearch)
   ! Only update time and energies when search for KMC step is done.
   if (.not. continueSearch) then
     TIME = TIME + TMEAN
-    eventEnergy = -KB*temp*log(TAUSUM/NU)
     if (eventEnergy > 0.0D0) then
       I = abs(type)
       K = merge(1, 2, type < 0)
