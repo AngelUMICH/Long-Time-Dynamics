@@ -471,7 +471,7 @@ contains
     defectType = defects(6,1:numDefects)
     defectId = defects(7,1:numDefects)
 
-    call bg%initBinGrid(30,30,30, boxx, boxy, boxz)
+    call bg%initBinGrid(70,70,70, boxx, boxy, boxz)
     call bg%assignAtomsToBins(pos, numDefects)
 
     !Use breadth first search to create clusters

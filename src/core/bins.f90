@@ -112,7 +112,7 @@ contains
     class(BinGrid), intent(inout) :: this
     real*8, dimension(:, :) :: atoms !reference atoms from the main program
 
-    integer :: nAtoms
+    integer :: nAtoms, id, i
     integer :: atomID, xBinId, yBinId, zBinId
 
     call this%resetGrid
@@ -133,6 +133,16 @@ contains
       end if
 
       call this%binList(xBinId, yBinId, zBinId)%addAtom(atomID)
+
+      ! Check for bins with too many atoms
+      ! if (this%binList(xBinId, yBinId, zBinId)%nAtoms==9) then
+      !   print *, xBinId, yBinId, zBinId, this%xBinSize, this%yBinSize, this%zBinSize
+      !   do i = 1, 9
+      !     id = this%binList(xBinId, yBinId, zBinId)%atomList(i)
+      !     print *, atoms(1, id), atoms(2, id), atoms(3, id)
+      !   end do
+      ! end if
+
     end do
 
   end subroutine assignAtomsToBins

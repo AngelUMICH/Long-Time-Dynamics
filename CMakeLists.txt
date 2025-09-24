@@ -84,6 +84,8 @@ target_link_libraries(opld PRIVATE
     stdc++ 
     m 
     dl
+    jpeg
+    png
 )
 
 # Compiler options for main executable

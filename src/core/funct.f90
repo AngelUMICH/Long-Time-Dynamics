@@ -83,9 +83,13 @@ subroutine WignerSeitzAnalysis
 
   CALL MPI_BCAST(RA, SIZE(RA), MPI_REAL8, 0, lmpSystem%getCommunicator(), IERR)
 
-  CALL RFGRID%initBinGrid(30, 30, 30, BOXX, BOXY, BOXZ)
-  CALL RFGRID%assignAtomsToBins(RR, NATOMR)
-
+  CALL RFGRID%initBinGrid(70, 70, 70, BOXX, BOXY, BOXZ)
+  ! if ( rank == 0 ) then
+    CALL RFGRID%assignAtomsToBins(RR, NATOMR)
+  ! end if
+  ! call MPI_BARRIER(lmpSystem%getCommunicator(), ierr)
+  ! call MPI_finalize(ierr)
+  ! stop
   OC = 0
   OCC = 0
   OCCBUFF = 0

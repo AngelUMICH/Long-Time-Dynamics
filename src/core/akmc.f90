@@ -46,16 +46,14 @@ subroutine DOSE
     end if
 
     if (TDAM .EQ. 2 .OR. TDAM .EQ. 3) THEN
-
       call BASIC_DAMAGE(NFREKL)
-
       call lmpSystem%assignPositions
-
     end if
 
-    call lmpSystem%relaxSystemEnergy
-
-    call lmpSystem%getPositions
+    if (NFREKL > 0) then
+      call lmpSystem%relaxSystemEnergy
+      call lmpSystem%getPositions
+    end if
 
     TIME_LAST = TIME
 
@@ -134,6 +132,7 @@ subroutine DCIDNT
     PX(7, NDTOT) = IV(1, j)
   end do
   
+  print *, 'Identifying defect clusters'
   call defects%identifyClusters(PX, NDTOT, 1.2D0)
 
   NDTOT = defects%numClusters
@@ -608,9 +607,9 @@ subroutine OPT(event, continueSearch)
 
   if (.not. continueSearch) then
     if (RANK == 0 .and. MOD(ISTEP, NFREQ) .EQ. 0) THEN
-      write (*, '(3X, 2A12, 7A14)') 'STEP', 'DIMER ID', 'BARRIER', &
+      write (*, '(3X, 2A12, 7A18)') 'STEP', 'DIMER ID', 'BARRIER', &
         'SYS ENERGY', 'TIME', 'Px', 'Py', 'Pz', 'DPA'
-      write (*, '(A,2I12,2F14.5,4ES14.5,E14.5)') 'ITR', ISTEP, EID, &
+      write (*, '(A,2I12,2F18.5,4ES18.5,E18.5)') 'ITR', ISTEP, EID, &
         eventEnergy, ENCALC, TIME, PRESS(1), PRESS(2), PRESS(3), DPA
       write(*,*)
     end if

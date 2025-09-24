@@ -229,10 +229,13 @@ subroutine readRefLattice
   use system
   use LMP_Driver
 
+  integer :: globalComm
   logical :: exists
 
+  globalComm = lmpSystem%getCommunicator()
+
   inquire (file='pos_ref.dat', exist=exists)
-  call MPI_BCAST(exists, 1, MPI_logical, 0, lmpSystem%getCommunicator(), ierr)
+  call MPI_BCAST(exists, 1, MPI_logical, 0, globalComm, ierr)
   if (.not. exists) then
     if (rank == 0) then
       write (*, '(A)') '***********************************************'
@@ -243,15 +246,29 @@ subroutine readRefLattice
     stop
   end if
 
-  ! Continues here if pos_ref.dat is found
-  open(unit=21, file='pos_ref.dat')
-  read(21, *) NATOMR
+  ! Read NATOMR on rank 0
+  if (rank == 0) then
+    open(unit=21, file='pos_ref.dat')
+    read(21, *) NATOMR
+  end if
+  
+  ! Broadcast NATOMR to all processes
+  call MPI_BCAST(NATOMR, 1, MPI_INTEGER, 0, globalComm, ierr)
+  
+  ! Now ALL processes can allocate RR with the correct size
   if (.not. allocated(RR)) allocate(RR(3,NATOMR))
-  do i= 1, natomr
-    read(21, *) (RR(j,i), j=1,3)
-    RR(:,i) = RR(:,i) / RLAT
-  end do
-  close(21)
+  
+  ! Only rank 0 reads the data
+  if (rank == 0) then
+    do i = 1, natomr
+      read(21, *) (RR(j,i), j=1,3)
+      RR(:,i) = RR(:,i) / RLAT
+    end do
+    close(21)
+  end if
+
+  ! Broadcast RR to all processes
+  call MPI_BCAST(RR, 3*NATOMR, MPI_DOUBLE, 0, globalComm, ierr)
 
 end subroutine readRefLattice
 !***********************************************************************!
